@@ -15,11 +15,17 @@ along.
    **Library → Plug-in Extras → Geotag from Phone Timeline...**
 3. Click **Import file…** and choose your Timeline export.
 4. Click **Geotag**. Each photo's capture time is converted to UTC and matched
-   against your location track; matched photos get GPS coordinates written to
-   the catalog.
+   against your location track; matched photos get GPS coordinates **and a place
+   name** (POI / City / State / Country) written to the catalog.
 
 Every export you import is merged into a local **history cache**, so you can
 geotag old photos any time — as long as some past export covered those dates.
+
+**One-time setup:** create a Google Cloud project, enable the **Places API
+(New)** and the **Geocoding API**, create an API key, and paste it into
+**File → Plug-in Manager → Phone Geotagger → Google API key**. Geotagging
+and correcting both resolve place names through Google (these are billable
+APIs; results are cached so each place is looked up once).
 
 ## Getting the Timeline file to your computer
 
@@ -38,47 +44,36 @@ required.
 
 ## Correcting a wrong geotag
 
-Google Timeline sometimes snaps a location to a nearby-but-wrong place. Two
-commands fix that:
+Google Timeline sometimes tags a photo to a nearby-but-wrong place. To fix a
+group:
 
-1. Select one photo carrying the bad tag and run **Library → Plug-in Extras →
-   Find Photos With This Geotag**. Every photo within 25 m of it is selected
-   in the grid. Deselect any that don't belong.
-2. Run **Correct Geotag of Selection...**. Choose the true location either
-   from nearby Timeline history points or with the built-in map picker:
-   **Open map picker** launches a map in your browser with a pin on the
-   current location — drag it to the correct spot (or search a place), then
-   back in Lightroom click **Use location from map**. Click **Apply** to write
-   the corrected coordinate to every selected photo.
+1. Select one photo with the bad tag and run **Library → Plug-in Extras →
+   Find Photos With This Geotag** to select every photo within 25 m. Deselect
+   any that don't belong.
+2. Run **Correct Geotag of Selection...**, type the correct place, click
+   **Search**, pick it from the Google results, and click **Apply**. The
+   place's coordinate and its name (Sublocation / City / State / Country) are
+   written to every selected photo.
 
-The map picker hands the coordinate back through your system clipboard, so no
-typing is needed. The corrected coordinates are written to the catalog; use
-**Metadata → Save Metadata to File** to push them into your files/XMP.
+The corrected data is written to the catalog; use **Metadata → Save Metadata
+to File** to push it into your files/XMP.
 
 ## Organizing photos into location collections
 
-Turn GPS coordinates into browsable collections named for real places.
+Geotagging writes each photo's place (POI, City, State, Country) into its
+IPTC metadata. This command turns that into collections — entirely offline,
+no API calls.
 
 1. Select geotagged photos and run **Library → Plug-in Extras → Create
    Location Collections...**.
-2. Choose the **collection name format** — a primary level (Neighborhood /
-   City / State / Country) and an optional secondary level for context. The
-   default is `Neighborhood, City`. The plugin reverse-geocodes each photo via
-   OpenStreetMap and adds it to a collection named by that format (e.g.
-   `Venice Beach, Los Angeles`), falling back to the finest available level for
-   photos that lack the chosen one. All the collections live in a **Geo
-   Locations** collection set.
+2. Choose the **collection name format** (primary + optional secondary of
+   POI / City / State / Country; default `POI, City`).
+3. Each photo is added to a collection named from its stored place (e.g.
+   `Griffith Observatory, Los Angeles`), all under a **Geo Locations** set.
 
-These are regular collections (a snapshot of the photos you ran it on), so
-re-run the command after geotagging more photos to fold them in — photos
-already in a collection are left as-is. Locations are cached locally, so
-repeat runs and photos that share a spot cost no extra lookups, and very large
-selections are processed in bounded batches to keep memory flat.
-
-**Note on the geocoder:** the default endpoint is the public OpenStreetMap
-Nominatim service, which asks for at most one request per second — the plugin
-throttles accordingly. For large libraries you can point the **Geocoder
-endpoint** field at your own Nominatim instance.
+These are regular collections (a snapshot), so re-run after geotagging more
+photos. Photos geotagged before place resolution existed have no stored place
+— re-geotag them to populate it.
 
 ## Installation
 
@@ -86,8 +81,9 @@ endpoint** field at your own Nominatim instance.
 2. Lightroom Classic → **File → Plug-in Manager → Add** → select the
    `PhoneGeotagger.lrplugin` folder.
 
-No other setup is required — you just need your exported Timeline JSON on disk
-(see [above](#getting-the-timeline-file-to-your-computer)).
+You also need your exported Timeline JSON on disk
+(see [above](#getting-the-timeline-file-to-your-computer)) and a Google API key
+set in the Plug-in Manager (see [One-time setup](#how-it-works)).
 
 ## The timezone model (please read once)
 
@@ -140,15 +136,14 @@ luarocks install busted
 busted
 ```
 
-The Lightroom-facing layer (`Info.lua`, `GeotagMenuItem.lua`,
-`GeotagDialog.lua`, `LrExec.lua`) is kept thin and verified manually.
+The Lightroom-facing layer (`Info.lua`, `PluginInfoProvider.lua`,
+`GeotagMenuItem.lua`, `GeotagDialog.lua`, and the other `*MenuItem.lua` /
+`*Dialog.lua` files) is kept thin and verified manually.
 
 ## Credits
 
 - JSON parsing by [dkjson](http://dkolf.de/dkjson-lua/) (David Kolf, MIT).
-- Map picker built with [Leaflet](https://leafletjs.com/) (BSD-2-Clause) and
-  [OpenStreetMap](https://www.openstreetmap.org/) tiles and search.
-- Reverse geocoding by [OpenStreetMap Nominatim](https://nominatim.org/).
+- Place names and geocoding by [Google Maps Platform](https://developers.google.com/maps).
 
 ## License
 
