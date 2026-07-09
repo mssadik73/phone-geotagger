@@ -85,7 +85,7 @@ function timeline_parser.parse(json_text)
   local points = {}
   if type(doc.locations) == "table" then
     parse_takeout(doc, points)
-  elseif doc.semanticSegments or doc.rawSignals then
+  elseif type(doc.semanticSegments) == "table" or type(doc.rawSignals) == "table" then
     parse_ondevice(doc, points)
   else
     return nil, "Unrecognized file. Expected a Google Timeline on-device export "
