@@ -108,7 +108,9 @@ LrTasks.startAsyncTask(function()
             end
             if lat then
               lat, lon = coord_round.round(lat, lon, settings.precision)
-              if place then stats.resolved = stats.resolved + 1 end
+              if place and (place.poi or place.city or place.state or place.country) then
+                stats.resolved = stats.resolved + 1
+              end
               writes[#writes + 1] = { photo = photo, lat = lat, lon = lon, place = place }
             else
               stats.unmatched = stats.unmatched + 1
