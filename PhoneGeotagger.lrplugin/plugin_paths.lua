@@ -19,8 +19,11 @@ function plugin_paths.cache_path()
 end
 
 -- Absolute path to the reverse-geocode (coordinate -> place) cache JSON.
+-- "-v2" because the place shape changed (sublocation is now the raw
+-- neighborhood, no city fallback); the old geocode.json is abandoned so
+-- entries rebuild under the new contract instead of producing doubled names.
 function plugin_paths.geocode_cache_path()
-  return LrPathUtils.child(data_dir(), "geocode.json")
+  return LrPathUtils.child(data_dir(), "geocode-v2.json")
 end
 
 return plugin_paths

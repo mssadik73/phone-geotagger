@@ -83,6 +83,7 @@ function LocationDialog.run(args)
         prefs.loc_endpoint = props.endpoint
         prefs.loc_primary = props.primary
         prefs.loc_secondary = props.secondary
+        prefs.loc_overwrite = nil
         result = {
           set_name = props.set_name, endpoint = props.endpoint,
           primary = props.primary, secondary = props.secondary,

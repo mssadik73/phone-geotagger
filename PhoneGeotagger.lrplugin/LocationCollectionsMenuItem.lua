@@ -51,19 +51,20 @@ LrTasks.startAsyncTask(function()
     local added, unresolved, no_gps = 0, 0, 0
 
     local function flush()
-      if pending_n == 0 then return end
-      catalog:withWriteAccessDo("Add photos to location collections", function()
-        for name, list in pairs(pending) do
-          local coll = colls[name]
-          if not coll then
-            coll = catalog:createCollection(name, set, true)
-            colls[name] = coll
+      if pending_n > 0 then
+        catalog:withWriteAccessDo("Add photos to location collections", function()
+          for name, list in pairs(pending) do
+            local coll = colls[name]
+            if not coll then
+              coll = catalog:createCollection(name, set, true)
+              colls[name] = coll
+            end
+            coll:addPhotos(list)
           end
-          coll:addPhotos(list)
-        end
-      end)
-      pending = {}
-      pending_n = 0
+        end)
+        pending = {}
+        pending_n = 0
+      end
       geo_cache.save(cache_path, cache)
     end
 
