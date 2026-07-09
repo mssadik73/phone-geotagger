@@ -4,8 +4,8 @@
 
 local collection_name = {}
 
-local ORDER = { "sublocation", "city", "state", "country" } -- fine -> coarse
-local RANK = { sublocation = 1, city = 2, state = 3, country = 4 }
+local ORDER = { "poi", "city", "state", "country" } -- fine -> coarse
+local RANK = { poi = 1, city = 2, state = 3, country = 4 }
 
 local function present(v)
   return v ~= nil and v ~= ""

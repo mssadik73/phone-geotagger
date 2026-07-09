@@ -3,7 +3,7 @@ local collection_name = require "collection_name"
 describe("collection_name.auto", function()
   it("pairs neighborhood with city", function()
     assert.equals("Venice Beach, Los Angeles", collection_name.auto({
-      sublocation = "Venice Beach", city = "Los Angeles",
+      poi = "Venice Beach", city = "Los Angeles",
       state = "California", country = "United States" }))
   end)
 
@@ -22,13 +22,13 @@ describe("collection_name.auto", function()
 
   it("treats empty-string fields as absent", function()
     assert.equals("Paris, France", collection_name.auto({
-      sublocation = "", city = "Paris", state = "", country = "France" }))
+      poi = "", city = "Paris", state = "", country = "France" }))
   end)
 end)
 
 describe("collection_name.of", function()
   local place = {
-    sublocation = "Venice Beach", city = "Los Angeles",
+    poi = "Venice Beach", city = "Los Angeles",
     state = "California", country = "United States",
   }
 
@@ -50,7 +50,7 @@ describe("collection_name.of", function()
   it("falls back to auto when the primary level is absent", function()
     local p = { city = "Los Angeles", state = "California" }
     assert.equals("Los Angeles, California",
-      collection_name.of(p, { primary = "sublocation", secondary = "city" }))
+      collection_name.of(p, { primary = "poi", secondary = "city" }))
   end)
 
   it("omits the secondary when it is absent for this photo", function()
@@ -62,7 +62,7 @@ end)
 
 describe("collection_name.format_error", function()
   it("accepts a broader secondary", function()
-    assert.is_nil(collection_name.format_error("sublocation", "city"))
+    assert.is_nil(collection_name.format_error("poi", "city"))
     assert.is_nil(collection_name.format_error("city", "country"))
   end)
 
@@ -71,7 +71,7 @@ describe("collection_name.format_error", function()
   end)
 
   it("rejects a secondary that is not broader than the primary", function()
-    assert.is_string(collection_name.format_error("city", "sublocation"))
+    assert.is_string(collection_name.format_error("city", "poi"))
     assert.is_string(collection_name.format_error("city", "city"))
   end)
 
