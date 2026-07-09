@@ -1,10 +1,8 @@
 local LrApplication = import "LrApplication"
 local LrTasks = import "LrTasks"
 local LrDialogs = import "LrDialogs"
+local LrPrefs = import "LrPrefs"
 
-local history_cache = require "history_cache"
-local candidate_finder = require "candidate_finder"
-local plugin_paths = require "plugin_paths"
 local CorrectDialog = require "CorrectDialog"
 
 LrTasks.startAsyncTask(function()
@@ -29,25 +27,33 @@ LrTasks.startAsyncTask(function()
     return
   end
 
-  local points = history_cache.load(plugin_paths.cache_path())
-  local candidates = candidate_finder.find(points, gps.latitude, gps.longitude,
-    { radius_m = 500, max = 10 })
+  local prefs = LrPrefs.prefsForPlugin()
+  local key = prefs.google_api_key
+  if not key or key == "" then
+    LrDialogs.message("Correct Geotag",
+      "Set your Google API key in the Plug-in Manager "
+      .. "(File > Plug-in Manager > Phone Geotagger) first.", "info")
+    return
+  end
 
   local result = CorrectDialog.run {
     photo_count = #photos,
     current_lat = gps.latitude,
     current_lon = gps.longitude,
-    candidates = candidates,
+    key = key,
   }
   if not result then return end
 
   catalog:withWriteAccessDo("Correct geotag", function()
     for _, photo in ipairs(photos) do
       photo:setRawMetadata("gps", { latitude = result.lat, longitude = result.lon })
+      if result.country then photo:setRawMetadata("country", result.country) end
+      if result.state then photo:setRawMetadata("stateProvince", result.state) end
+      if result.city then photo:setRawMetadata("city", result.city) end
+      if result.poi then photo:setRawMetadata("location", result.poi) end
     end
   end)
-
-  LrDialogs.message("Correct Geotag",
-    string.format("%d photo(s) re-tagged to %.5f, %.5f.",
-      #photos, result.lat, result.lon), "info")
+  LrDialogs.message("Correct Geotag", string.format(
+    "%d photo(s) re-tagged to %s (%.5f, %.5f).",
+    #photos, result.poi or "the selected place", result.lat, result.lon), "info")
 end)
