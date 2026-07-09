@@ -17,10 +17,10 @@ describe("place_extract.extract", function()
     assert.equals("Hollywood", p.sublocation)
   end)
 
-  it("falls back to city/town/village for both city and sublocation", function()
+  it("returns nil sublocation when there is no neighbourhood", function()
     local p = place_extract.extract({ village = "Lone Pine", state = "California" })
     assert.equals("Lone Pine", p.city)
-    assert.equals("Lone Pine", p.sublocation)
+    assert.is_nil(p.sublocation)
   end)
 
   it("leaves city nil but keeps sublocation when only a neighbourhood exists", function()

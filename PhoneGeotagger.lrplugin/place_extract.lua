@@ -15,7 +15,6 @@ function place_extract.extract(address)
   if type(address) ~= "table" then return {} end
   local city = first(address, { "city", "town", "village", "municipality" })
   local sub = first(address, { "neighbourhood", "suburb", "quarter", "city_district" })
-    or city
   return {
     country = first(address, { "country" }),
     state = first(address, { "state" }),
