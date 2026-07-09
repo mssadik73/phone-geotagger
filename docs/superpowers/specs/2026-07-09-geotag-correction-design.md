@@ -39,9 +39,9 @@ Correct geotag — 43 photos selected ──────────────
 
  Choose the corrected location:
 
- ( ) From Timeline history near these photos:
-       23.81100, 90.41000   (visit, ~180 m away)
-       23.79001, 90.30000   (raw signal, ~410 m away)
+ ( ) From Timeline history near this location:
+       23.81100, 90.41000   (~180 m away)
+       23.79001, 90.30000   (~410 m away)
        [ up to 10, nearest first; "none found nearby" if empty ]
 
  ( ) From map:   [ Open map picker ]   picked: (none yet)
@@ -60,12 +60,13 @@ There is **no manual typing** — the Lightroom SDK has no map/browser widget,
 so coordinates come from one of two sources:
 
 ### From Timeline history (primary, one click)
-The plugin looks in the cached location history around the selected photos'
-capture-time span and lists raw signals and visit places within a search
-radius, nearest first, capped at 10. The raw GPS signal is usually correct
-even when Google snapped the visit to the wrong place, so this directly
-attacks the root cause. Each row shows the coordinate, a type label
-(visit/raw signal), and distance from the current tag.
+The plugin searches the cached location history for recorded points within a
+radius of the current (wrong) tag, nearest first, capped at 10. Because the
+true location is nearby by premise, the raw GPS points recorded there are
+usually the correct spot even when Google snapped the visit to the wrong
+place, so this directly attacks the root cause. Each row shows the coordinate
+and its distance from the current tag. (The cache stores flattened points, so
+no visit/raw-signal type label is shown.)
 
 ### From map picker (always-works fallback)
 No embedded widget exists, so the map lives in the user's browser and the
@@ -100,11 +101,10 @@ layer is verified manually in Lightroom.
 - **coord_parse.lua** — `parse(text)` → `lat, lon` or `nil, error`. Accepts
   "lat, lon" and "lat lon", tolerates surrounding whitespace/junk, rejects
   out-of-range values (|lat| ≤ 90, |lon| ≤ 180).
-- **candidate_finder.lua** — given the group's capture-time span, the current
-  coordinate, the history cache points, and a radius, returns up to N nearby
-  history candidates (raw signals + visit places), deduped by rounded
-  coordinate, annotated with distance and label, nearest first. Reuses
-  `history_cache` and the new `geo_group`.
+- **candidate_finder.lua** — given the current coordinate, the history cache
+  points, and options (radius, max), returns up to N nearby history
+  candidates, deduped by rounded coordinate, annotated with distance, nearest
+  first. Reuses the new `geo_group`.
 - **clipboard.lua** — `read_command()` → platform clipboard-read command
   string; `read(exec)` → trimmed clipboard text via an injected `exec`
   (same injection pattern as `adb_client`). Command-building unit-tested
@@ -130,10 +130,11 @@ layer is verified manually in Lightroom.
 ## Data flow
 
 Example photo GPS → `geo_group.filter_within` over the catalog's batched GPS
-→ grid selection (command 1). Then: selection GPS + capture span →
-`candidate_finder` over the cache → user picks a history candidate **or** the
-map-picked coordinate (clipboard → `coord_parse`) → batched
-`setRawMetadata('gps', …)` in one write block (command 2).
+→ grid selection (command 1). Then: first selected photo's GPS →
+`candidate_finder` over the cache (proximity to that coordinate) → user picks
+a history candidate **or** the map-picked coordinate (clipboard →
+`coord_parse`) → batched `setRawMetadata('gps', …)` in one write block
+(command 2).
 
 ## Defaults
 
