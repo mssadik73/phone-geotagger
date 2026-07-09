@@ -14,7 +14,7 @@
 
 - **Lua 5.1 compatibility everywhere** (no `goto`, no `table.unpack`, no `//`).
 - **Flat file layout** inside `PhoneGeotagger.lrplugin/`; core modules never call Lightroom's `import`.
-- Baseline suite is **87 passing**. Net after this work ≈ **95** (+coord_round, +collection_name, −smartcoll_rules; place_extract test count unchanged).
+- Baseline suite is **87 passing**. Net after this work ≈ **101** (+5 coord_round, +14 collection_name, −5 smartcoll_rules; place_extract test count unchanged).
 - Snapping default precision **4 decimals (~11 m)**; popup values `Exact → 8`, `~11 m → 4`, `~110 m → 3`.
 - Collection naming: finest present level of `{sublocation, city, state, country}`, comma-joined with the next coarser present level; nil when none present.
 - Streaming flush size: **500** photos (fixed internal constant `FLUSH_SIZE`).
@@ -289,8 +289,12 @@ git commit -m "refactor: place_extract sublocation is the raw neighborhood (no c
 - Test: `spec/collection_name_spec.lua`
 
 **Interfaces:**
-- Consumes: a place table `{ sublocation, city, state, country }` (from `place_extract`).
-- Produces: `collection_name.of(place)` → the collection name string (finest present level, plus the next coarser present level as context, comma-joined), or `nil` when no level is present. Empty-string fields count as absent.
+- Consumes: a place table `{ sublocation, city, state, country }` (from `place_extract`); a format `{ primary = <level>, secondary = <level> | "none" }` where level ∈ `"sublocation" | "city" | "state" | "country"`.
+- Produces:
+  - `collection_name.auto(place)` → finest present level + next coarser present level, comma-joined; `nil` when no level present.
+  - `collection_name.of(place, fmt)` → chosen-format name: `place[fmt.primary]`, appending `", " .. place[fmt.secondary]` when the secondary is set (not `"none"`), differs from the primary level, and is present; falls back to `auto(place)` when `place[fmt.primary]` is absent; `nil` when nothing present.
+  - `collection_name.format_error(primary, secondary)` → `nil` if valid, else an error string. Valid when `secondary == "none"` or `rank(secondary) > rank(primary)`, `rank = { sublocation=1, city=2, state=3, country=4 }`; also rejects an unknown primary/secondary.
+- Empty-string fields count as absent throughout.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -299,44 +303,83 @@ git commit -m "refactor: place_extract sublocation is the raw neighborhood (no c
 ```lua
 local collection_name = require "collection_name"
 
-describe("collection_name.of", function()
+describe("collection_name.auto", function()
   it("pairs neighborhood with city", function()
-    assert.equals("Venice Beach, Los Angeles", collection_name.of({
+    assert.equals("Venice Beach, Los Angeles", collection_name.auto({
       sublocation = "Venice Beach", city = "Los Angeles",
       state = "California", country = "United States" }))
   end)
 
-  it("pairs neighborhood with state when city is absent", function()
-    assert.equals("Venice Beach, California", collection_name.of({
-      sublocation = "Venice Beach", state = "California" }))
-  end)
-
-  it("pairs city with state", function()
-    assert.equals("Los Angeles, California", collection_name.of({
+  it("pairs city with state when there is no neighborhood", function()
+    assert.equals("Los Angeles, California", collection_name.auto({
       city = "Los Angeles", state = "California", country = "United States" }))
   end)
 
-  it("pairs city with country when state is absent", function()
-    assert.equals("Los Angeles, United States", collection_name.of({
-      city = "Los Angeles", country = "United States" }))
-  end)
-
-  it("pairs state with country", function()
-    assert.equals("California, United States", collection_name.of({
-      state = "California", country = "United States" }))
-  end)
-
   it("uses country alone when it is the only level", function()
-    assert.equals("United States", collection_name.of({ country = "United States" }))
+    assert.equals("United States", collection_name.auto({ country = "United States" }))
   end)
 
   it("returns nil when no level is present", function()
-    assert.is_nil(collection_name.of({}))
+    assert.is_nil(collection_name.auto({}))
   end)
 
   it("treats empty-string fields as absent", function()
-    assert.equals("Paris, France", collection_name.of({
+    assert.equals("Paris, France", collection_name.auto({
       sublocation = "", city = "Paris", state = "", country = "France" }))
+  end)
+end)
+
+describe("collection_name.of", function()
+  local place = {
+    sublocation = "Venice Beach", city = "Los Angeles",
+    state = "California", country = "United States",
+  }
+
+  it("applies primary + secondary", function()
+    assert.equals("Los Angeles, California",
+      collection_name.of(place, { primary = "city", secondary = "state" }))
+  end)
+
+  it("omits the secondary when it is none", function()
+    assert.equals("Los Angeles",
+      collection_name.of(place, { primary = "city", secondary = "none" }))
+  end)
+
+  it("omits the secondary when it equals the primary", function()
+    assert.equals("Los Angeles",
+      collection_name.of(place, { primary = "city", secondary = "city" }))
+  end)
+
+  it("falls back to auto when the primary level is absent", function()
+    local p = { city = "Los Angeles", state = "California" }
+    assert.equals("Los Angeles, California",
+      collection_name.of(p, { primary = "sublocation", secondary = "city" }))
+  end)
+
+  it("omits the secondary when it is absent for this photo", function()
+    local p = { city = "Los Angeles" }
+    assert.equals("Los Angeles",
+      collection_name.of(p, { primary = "city", secondary = "state" }))
+  end)
+end)
+
+describe("collection_name.format_error", function()
+  it("accepts a broader secondary", function()
+    assert.is_nil(collection_name.format_error("sublocation", "city"))
+    assert.is_nil(collection_name.format_error("city", "country"))
+  end)
+
+  it("accepts a none secondary", function()
+    assert.is_nil(collection_name.format_error("country", "none"))
+  end)
+
+  it("rejects a secondary that is not broader than the primary", function()
+    assert.is_string(collection_name.format_error("city", "sublocation"))
+    assert.is_string(collection_name.format_error("city", "city"))
+  end)
+
+  it("rejects an unknown level", function()
+    assert.is_string(collection_name.format_error("borough", "city"))
   end)
 end)
 ```
@@ -351,28 +394,64 @@ Expected: FAIL — `module 'collection_name' not found`
 `PhoneGeotagger.lrplugin/collection_name.lua`:
 
 ```lua
--- Builds a regular-collection name from a reverse-geocoded place: the finest
--- present level, plus the next coarser present level for context/disambiguation.
+-- Builds a regular-collection name from a reverse-geocoded place, either from
+-- an explicit primary+secondary format or automatically (finest present level
+-- plus the next coarser present level). Also validates a chosen format.
 
 local collection_name = {}
 
--- place: { sublocation, city, state, country }. Returns a name string or nil.
-function collection_name.of(place)
-  local levels = { place.sublocation, place.city, place.state, place.country }
+local ORDER = { "sublocation", "city", "state", "country" } -- fine -> coarse
+local RANK = { sublocation = 1, city = 2, state = 3, country = 4 }
+
+local function present(v)
+  return v ~= nil and v ~= ""
+end
+
+-- Finest present level + next coarser present level, comma-joined; nil if none.
+function collection_name.auto(place)
   local primary_i
-  for i = 1, #levels do
-    local v = levels[i]
-    if v ~= nil and v ~= "" then primary_i = i; break end
+  for i = 1, #ORDER do
+    if present(place[ORDER[i]]) then primary_i = i; break end
   end
   if not primary_i then return nil end
-  local primary = levels[primary_i]
-  for i = primary_i + 1, #levels do
-    local v = levels[i]
-    if v ~= nil and v ~= "" then
-      return primary .. ", " .. v
+  local primary = place[ORDER[primary_i]]
+  for i = primary_i + 1, #ORDER do
+    if present(place[ORDER[i]]) then
+      return primary .. ", " .. place[ORDER[i]]
     end
   end
   return primary
+end
+
+-- Applies fmt = { primary, secondary }; falls back to auto when the primary
+-- level is absent for this place.
+function collection_name.of(place, fmt)
+  if not fmt then return collection_name.auto(place) end
+  local primary = place[fmt.primary]
+  if not present(primary) then return collection_name.auto(place) end
+  local sec = fmt.secondary
+  if sec and sec ~= "none" and sec ~= fmt.primary and present(place[sec]) then
+    return primary .. ", " .. place[sec]
+  end
+  return primary
+end
+
+-- nil if the format is valid, else an error message.
+function collection_name.format_error(primary, secondary)
+  if not RANK[primary] then
+    return "Unknown primary level: " .. tostring(primary)
+  end
+  if secondary == nil or secondary == "none" then
+    return nil
+  end
+  if not RANK[secondary] then
+    return "Unknown secondary level: " .. tostring(secondary)
+  end
+  if RANK[secondary] <= RANK[primary] then
+    return "The secondary level must be broader than the primary level, "
+      .. "or set to (none)."
+  end
+  return nil
 end
 
 return collection_name
@@ -381,24 +460,25 @@ return collection_name
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `busted spec/collection_name_spec.lua`
-Expected: `8 successes / 0 failures`
+Expected: `14 successes / 0 failures`
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add PhoneGeotagger.lrplugin/collection_name.lua spec/collection_name_spec.lua
-git commit -m "feat: collection_name builds hierarchical place collection names"
+git commit -m "feat: collection_name with format, auto fallback, and validation"
 ```
 
 ---
 
-### Task 5: Simplify LocationDialog (drop overwrite, simplify the count line)
+### Task 5: LocationDialog — drop overwrite, add the format chooser + validation
 
 **Files:**
 - Modify: `PhoneGeotagger.lrplugin/LocationDialog.lua`
 
 **Interfaces:**
-- Produces: `LocationDialog.run(args)` with `args = { photo_count, prefs }` → `{ set_name, endpoint }` or nil on cancel. No `overwrite`; no `unique_count`. Persists `loc_set_name`, `loc_endpoint`. Manual verification; `luac -p` + full suite.
+- Consumes: `collection_name.format_error` (Task 4).
+- Produces: `LocationDialog.run(args)` with `args = { photo_count, prefs }` → `{ set_name, endpoint, primary, secondary }` or nil on cancel. No `overwrite`. Persists `loc_set_name`, `loc_endpoint`, `loc_primary`, `loc_secondary`. Defaults: primary `"sublocation"` (most granular), secondary `"city"`. Re-presents the dialog with an error message if the chosen format is invalid; only returns a valid format. Manual verification; `luac -p` + full suite.
 
 - [ ] **Step 1: Rewrite LocationDialog.lua**
 
@@ -411,10 +491,26 @@ local LrBinding = import "LrBinding"
 local LrDialogs = import "LrDialogs"
 local LrFunctionContext = import "LrFunctionContext"
 
+local collection_name = require "collection_name"
+
 local LocationDialog = {}
 
+local LEVEL_ITEMS = {
+  { title = "Neighborhood", value = "sublocation" },
+  { title = "City", value = "city" },
+  { title = "State / Province", value = "state" },
+  { title = "Country", value = "country" },
+}
+local SECONDARY_ITEMS = {
+  { title = "(none)", value = "none" },
+  { title = "Neighborhood", value = "sublocation" },
+  { title = "City", value = "city" },
+  { title = "State / Province", value = "state" },
+  { title = "Country", value = "country" },
+}
+
 -- args: { photo_count, prefs }
--- Returns { set_name, endpoint } or nil on cancel.
+-- Returns { set_name, endpoint, primary, secondary } or nil on cancel.
 function LocationDialog.run(args)
   local prefs = args.prefs
   local result
@@ -427,6 +523,8 @@ function LocationDialog.run(args)
       or "Geo Locations"
     props.endpoint = (prefs.loc_endpoint and prefs.loc_endpoint ~= "" and prefs.loc_endpoint)
       or "https://nominatim.openstreetmap.org/reverse"
+    props.primary = prefs.loc_primary or "sublocation"
+    props.secondary = prefs.loc_secondary or "city"
 
     local contents = f:column {
       bind_to_object = props,
@@ -444,24 +542,42 @@ function LocationDialog.run(args)
         f:static_text { title = "Geocoder endpoint:" },
         f:edit_field { value = bind "endpoint", fill_horizontal = 1 },
       },
+      f:row {
+        f:static_text { title = "Collection name — primary:" },
+        f:popup_menu { items = LEVEL_ITEMS, value = bind "primary" },
+        f:static_text { title = "secondary:" },
+        f:popup_menu { items = SECONDARY_ITEMS, value = bind "secondary" },
+      },
     }
 
-    local action = LrDialogs.presentModalDialog {
-      title = "Create Location Collections",
-      contents = contents,
-      actionVerb = "Create Collections",
-    }
-    if action ~= "ok" then return end
+    while true do
+      local action = LrDialogs.presentModalDialog {
+        title = "Create Location Collections",
+        contents = contents,
+        actionVerb = "Create Collections",
+      }
+      if action ~= "ok" then return end -- cancel: result stays nil
 
-    if props.set_name == nil or props.set_name == "" then props.set_name = "Geo Locations" end
-    if props.endpoint == nil or props.endpoint == "" then
-      props.endpoint = "https://nominatim.openstreetmap.org/reverse"
+      if props.set_name == nil or props.set_name == "" then props.set_name = "Geo Locations" end
+      if props.endpoint == nil or props.endpoint == "" then
+        props.endpoint = "https://nominatim.openstreetmap.org/reverse"
+      end
+
+      local ferr = collection_name.format_error(props.primary, props.secondary)
+      if ferr then
+        LrDialogs.message("Invalid collection name format", ferr, "warning")
+      else
+        prefs.loc_set_name = props.set_name
+        prefs.loc_endpoint = props.endpoint
+        prefs.loc_primary = props.primary
+        prefs.loc_secondary = props.secondary
+        result = {
+          set_name = props.set_name, endpoint = props.endpoint,
+          primary = props.primary, secondary = props.secondary,
+        }
+        return
+      end
     end
-
-    prefs.loc_set_name = props.set_name
-    prefs.loc_endpoint = props.endpoint
-
-    result = { set_name = props.set_name, endpoint = props.endpoint }
   end)
 
   return result
@@ -477,13 +593,13 @@ Run:
 luac -p PhoneGeotagger.lrplugin/LocationDialog.lua
 busted
 ```
-Expected: `luac` clean; `busted` still green (100 after Task 4).
+Expected: `luac` clean; `busted` still green (106 after Task 4).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add PhoneGeotagger.lrplugin/LocationDialog.lua
-git commit -m "refactor: LocationDialog drops overwrite; simpler count line"
+git commit -m "feat: LocationDialog format chooser (primary/secondary) with validation"
 ```
 
 ---
@@ -494,7 +610,7 @@ git commit -m "refactor: LocationDialog drops overwrite; simpler count line"
 - Modify (replace entirely): `PhoneGeotagger.lrplugin/LocationCollectionsMenuItem.lua`
 
 **Interfaces:**
-- Consumes: `geocode_client.reverse(http_get, endpoint, lat, lon)`, `place_extract.extract` (Task 3), `geo_cache.*`, `collection_name.of` (Task 4), `plugin_paths.geocode_cache_path`, `LocationDialog.run{photo_count, prefs}` (Task 5); Lightroom SDK (`getTargetPhoto`, `getTargetPhotos`, `getRawMetadata("gps")`, `withWriteAccessDo`, `createCollectionSet`, `createCollection`, `collection:addPhotos`, `LrHttp.get`, `LrProgressScope`, `LrTasks.sleep`, `LrTasks.pcall`).
+- Consumes: `geocode_client.reverse(http_get, endpoint, lat, lon)`, `place_extract.extract` (Task 3), `geo_cache.*`, `collection_name.of(place, fmt)` (Task 4), `plugin_paths.geocode_cache_path`, `LocationDialog.run{photo_count, prefs}` → `{set_name, endpoint, primary, secondary}` (Task 5); Lightroom SDK (`getTargetPhoto`, `getTargetPhotos`, `getRawMetadata("gps")`, `withWriteAccessDo`, `createCollectionSet`, `createCollection`, `collection:addPhotos`, `LrHttp.get`, `LrProgressScope`, `LrTasks.sleep`, `LrTasks.pcall`). Builds `fmt = { primary = settings.primary, secondary = settings.secondary }` and passes it to `collection_name.of`.
 - Produces: the streaming command. Manual verification; `luac -p` + full suite.
 
 - [ ] **Step 1: Replace the file**
@@ -538,6 +654,7 @@ LrTasks.startAsyncTask(function()
     local prefs = LrPrefs.prefsForPlugin()
     local settings = LocationDialog.run { photo_count = #photos, prefs = prefs }
     if not settings then return end
+    local fmt = { primary = settings.primary, secondary = settings.secondary }
 
     local cache_path = plugin_paths.geocode_cache_path()
     local cache = geo_cache.load(cache_path)
@@ -591,7 +708,7 @@ LrTasks.startAsyncTask(function()
           end
           LrTasks.sleep(1.1) -- Nominatim: <= 1 req/sec, only on a real lookup
         end
-        local name = collection_name.of(place)
+        local name = collection_name.of(place, fmt)
         if name then
           pending[name] = pending[name] or {}
           pending[name][#pending[name] + 1] = photo
@@ -632,15 +749,19 @@ Run:
 luac -p PhoneGeotagger.lrplugin/LocationCollectionsMenuItem.lua
 busted
 ```
-Expected: `luac` clean; `busted` still green (100).
+Expected: `luac` clean; `busted` still green (106).
 
 - [ ] **Step 3: Manual test in Lightroom** (deferred to owner; note in report)
 
 1. Reload the plugin. Select geotagged photos across ≥2 neighborhoods → **Create
-   Location Collections...** → dialog shows set name + endpoint (no overwrite).
+   Location Collections...** → dialog shows set name + endpoint + the Primary /
+   Secondary format popups (default Neighborhood / City, no overwrite).
 2. Run → progress advances; a "Geo Locations" set fills with regular
-   collections named "Neighborhood, City" (or the coarser fallback), each
-   holding its photos.
+   collections named per the chosen format ("Neighborhood, City" by default,
+   with the auto fallback for photos missing the primary level), each holding
+   its photos. Change the format (e.g. City / State) and re-run to confirm the
+   names follow it; pick an invalid combo (e.g. City / Neighborhood) → the
+   dialog shows an error and stays open.
 3. Large selection (hundreds+) → memory stays flat; collections appear
    incrementally as flushes happen.
 4. Re-run on overlapping photos → no duplicate membership; second run fast
@@ -687,7 +808,7 @@ git rm PhoneGeotagger.lrplugin/smartcoll_rules.lua spec/smartcoll_rules_spec.lua
 - [ ] **Step 3: Run the full suite**
 
 Run: `busted`
-Expected: all pass, ~95 (100 − 5 removed smartcoll_rules tests).
+Expected: all pass, 101 (106 − 5 removed smartcoll_rules tests).
 
 - [ ] **Step 4: Commit**
 
@@ -712,10 +833,13 @@ Turn GPS coordinates into browsable collections named for real places.
 
 1. Select geotagged photos and run **Library → Plug-in Extras → Create
    Location Collections...**.
-2. The plugin reverse-geocodes each photo via OpenStreetMap and adds it to a
-   collection named for its place — `Neighborhood, City` where a neighborhood
-   is known, otherwise `City, State` or `State, Country`. All the collections
-   live in a **Geo Locations** collection set.
+2. Choose the **collection name format** — a primary level (Neighborhood /
+   City / State / Country) and an optional secondary level for context. The
+   default is `Neighborhood, City`. The plugin reverse-geocodes each photo via
+   OpenStreetMap and adds it to a collection named by that format (e.g.
+   `Venice Beach, Los Angeles`), falling back to the finest available level for
+   photos that lack the chosen one. All the collections live in a **Geo
+   Locations** collection set.
 
 These are regular collections (a snapshot of the photos you ran it on), so
 re-run the command after geotagging more photos to fold them in — photos
@@ -732,7 +856,7 @@ endpoint** field at your own Nominatim instance.
 - [ ] **Step 2: Final full-suite run**
 
 Run: `busted`
-Expected: all pass (~95), `0 failures`.
+Expected: all pass (101), `0 failures`.
 
 - [ ] **Step 3: Commit**
 

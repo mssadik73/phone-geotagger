@@ -53,23 +53,48 @@ a collection is a no-op).
 
 No IPTC metadata is written in this command anymore.
 
-### Collection naming (hierarchical, finest + parent context)
+### Collection naming (user-chosen format, with automatic fallback)
 Each photo's place is reverse-geocoded to levels neighborhood / city / state /
-country. The collection name is the **finest present level, plus the next
-coarser present level for context**, comma-joined:
+country. The user chooses the **collection name format** in the dialog with two
+dropdowns:
 
-| Finest present | Name |
+- **Primary level:** Neighborhood / City / State / Country — the collection is
+  named by this level.
+- **Secondary level:** (none) / Neighborhood / City / State / Country — appended
+  after a comma for context/disambiguation.
+
+The name is `primary` or `primary, secondary` — e.g. primary=Neighborhood,
+secondary=City → `Venice Beach, Los Angeles`; primary=City, secondary=State →
+`Los Angeles, California`. Any combination is selectable. The secondary is
+omitted when it is "(none)", equals the primary level, or is absent for that
+photo.
+
+**Fallback:** if a photo's chosen **primary** level is absent (e.g. the user
+picks Neighborhood but the geocoder returns none), that photo uses the
+**automatic** naming instead — the finest present level plus the next coarser
+present level:
+
+| Auto (fallback) finest present | Name |
 |---|---|
 | neighborhood (+ city) | `Venice Beach, Los Angeles` |
-| neighborhood (no city, + state) | `Venice Beach, California` |
 | city (+ state) | `Los Angeles, California` |
-| city (no state, + country) | `Los Angeles, United States` |
 | state (+ country) | `California, United States` |
 | country only | `United States` |
 | nothing | unresolved (skip) |
 
-Including the parent level in the name disambiguates same-named neighborhoods
-in different cities for free.
+So most photos follow the chosen format; only photos missing that level fall
+back to a sensible automatic name rather than being dropped. **Default format:
+primary=Neighborhood, secondary=City.**
+
+### Format validation
+The two dropdowns allow combinations that don't make sense — a secondary level
+that is not broader than the primary (e.g. primary=City, secondary=Neighborhood,
+or primary=City, secondary=City). The format is **validated before the run**:
+the secondary must be **broader than** the primary, or "(none)". If it isn't,
+the plugin shows a clear error and does not proceed — the user fixes the
+selection and confirms again. Level order (fine → coarse):
+`sublocation < city < state < country`. A format is valid when
+`secondary == "none"` or `rank(secondary) > rank(primary)`.
 
 ### Components
 - **`place_extract.lua`** (changed): `sublocation` becomes the **raw
@@ -78,27 +103,46 @@ in different cities for free.
   with `sublocation = nil` when there is no neighborhood. (Its one test that
   expected the city fallback is updated.)
 - **New core module `collection_name.lua`** (Lightroom-independent,
-  unit-tested):
-  - `collection_name.of(place)` → the collection name string, or `nil` when no
-    level is present. `place = { sublocation, city, state, country }`. Picks the
-    finest present level as primary and the next coarser present level as
-    context; returns `primary` or `primary .. ", " .. context`.
+  unit-tested). `place = { sublocation, city, state, country }`; levels are the
+  strings `"sublocation" | "city" | "state" | "country"`; a format is
+  `{ primary = <level>, secondary = <level> | "none" }`:
+  - `collection_name.auto(place)` → finest present level + next coarser present
+    level, comma-joined; `nil` when no level is present.
+  - `collection_name.of(place, fmt)` → applies the chosen format: if
+    `place[fmt.primary]` is present, returns it, appending `", " .. place[fmt.secondary]`
+    when the secondary is set (not "none"), differs from the primary, and is
+    present; otherwise falls back to `collection_name.auto(place)`. `nil` when
+    nothing is present.
+  - `collection_name.format_error(primary, secondary)` → `nil` if the format is
+    valid, else a human-readable error string. Valid when `secondary == "none"`
+    or `rank(secondary) > rank(primary)` for
+    `rank = { sublocation=1, city=2, state=3, country=4 }`; also rejects an
+    unknown primary/secondary level.
 - **`LocationCollectionsMenuItem.lua`** (rewritten): the streaming loop
   (see below). Uses `geo_cache`, `geocode_client`, `place_extract`,
   `collection_name`, `plugin_paths`, `LocationDialog`. No longer uses
   `smartcoll_rules`, `batchGetFormattedMetadata`, or `setRawMetadata`.
 - **`LocationDialog.lua`** (changed): remove the "overwrite existing location
-  metadata" checkbox and its pref (no metadata to overwrite). Keep the set-name
-  and geocoder-endpoint fields and the count line.
+  metadata" checkbox and its pref. Keep set-name and geocoder-endpoint fields
+  and a photo-count line. **Add two popups — Collection name format: Primary
+  level (Neighborhood / City / State / Country) and Secondary level ((none) /
+  Neighborhood / City / State / Country)**, persisted in prefs (default
+  primary=Neighborhood, secondary=City). **On OK, validate with
+  `collection_name.format_error`; if it returns an error, show it via
+  `LrDialogs.message` and re-present the dialog (loop) so the user can fix it;
+  only return once the format is valid or the user cancels.** Returns
+  `{ set_name, endpoint, primary, secondary }`.
 - **Removed:** `smartcoll_rules.lua` and `spec/smartcoll_rules_spec.lua`
   (no smart rules or name disambiguation needed).
 
 ### Streaming loop
 1. Empty-selection guard (`getTargetPhoto() == nil`); gather target photos.
-2. Show the dialog (set name, endpoint); return on cancel. The pre-dialog count
-   is the number of selected photos (upper bound).
+2. Show the dialog (set name, endpoint, primary+secondary format); return on
+   cancel. The dialog itself validates the format before returning. The
+   pre-dialog count is the number of selected photos (upper bound).
 3. Load the geo cache. Create/get the parent collection **set** (the configured
-   name) in a short write block.
+   name) in a short write block. Build `fmt = { primary = settings.primary,
+   secondary = settings.secondary }`.
 4. Iterate photos with a cancelable progress scope. For each photo:
    - Read GPS via `photo:getRawMetadata("gps")` (one photo at a time — lowest
      memory). Skip photos without GPS.
@@ -106,7 +150,7 @@ in different cities for free.
      (throttled `LrTasks.sleep(1.1)` on a real network lookup only; failed
      lookups are **not** cached so they retry) → `place_extract.extract` →
      `geo_cache.put`. Resolution happens **outside** any write block.
-   - `name = collection_name.of(place)`; if `nil`, count unresolved and skip.
+   - `name = collection_name.of(place, fmt)`; if `nil`, count unresolved and skip.
    - Buffer the photo under `name` (`pending[name][#+1] = photo`).
    - **Every 500 processed photos, flush** (see below).
 5. Final flush. Save the cache. Summary dialog: added / unresolved / no-GPS
