@@ -24,17 +24,13 @@
   <div id="status">Drag the pin to the correct spot, or click the map.</div>
   <div id="map"></div>
   <script>
-    // Coords arrive in the hash (the plugin uses "#lat=..&lon=.."), because
-    // macOS drops a "?query" when opening a local file:// URL. Fall back to
-    // the query string if a hash isn't present.
-    var coordStr = (location.hash && location.hash.length > 1)
-      ? "&" + location.hash.slice(1)
-      : location.search;
-    function param(name, fallback) {
-      var m = new RegExp("[?&]" + name + "=([^&]+)").exec(coordStr);
-      return m ? parseFloat(decodeURIComponent(m[1])) : fallback;
-    }
-    var lat = param("lat", 0), lon = param("lon", 0);
+    // The plugin substitutes the real coordinates into these placeholders
+    // before opening this page, because macOS strips both the "?query" and
+    // "#hash" when opening a local file:// URL through the OS.
+    var lat = parseFloat("__START_LAT__");
+    var lon = parseFloat("__START_LON__");
+    if (isNaN(lat)) { lat = 0; }
+    if (isNaN(lon)) { lon = 0; }
 
     var map = L.map("map").setView([lat, lon], 16);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {

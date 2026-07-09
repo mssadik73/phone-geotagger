@@ -62,18 +62,48 @@ function CorrectDialog.run(args)
         f:push_button {
           title = "Open map picker",
           action = function()
-            local html = LrPathUtils.child(_PLUGIN.path, "mappicker.html")
-            html = html:gsub("\\", "/")
-            -- percent-encode characters that break a file URL, keeping / and : and . and -
-            html = html:gsub("[^%w/%:%.%-_]", function(ch)
-              return string.format("%%%02X", string.byte(ch))
-            end)
-            -- Pass coords in the URL hash, not a query string: macOS drops
-            -- the "?query" when opening a local file:// URL, but keeps "#hash".
-            local url = "file:///" .. html:gsub("^/", "")
-              .. "#lat=" .. tostring(args.current_lat)
-              .. "&lon=" .. tostring(args.current_lon)
-            LrHttp.openUrlInBrowser(url)
+            local function file_url(p)
+              p = p:gsub("\\", "/")
+              p = p:gsub("[^%w/%:%.%-_]", function(ch)
+                return string.format("%%%02X", string.byte(ch))
+              end)
+              return "file:///" .. p:gsub("^/", "")
+            end
+            -- macOS strips both ?query and #hash when opening a local file://
+            -- URL, so coordinates can't ride the URL. Generate a self-contained
+            -- page in the temp folder: absolute file URLs for Leaflet, and the
+            -- coordinates baked straight into the script.
+            local dir = _PLUGIN.path
+            local fh = io.open(LrPathUtils.child(dir, "mappicker.html"), "rb")
+            if not fh then
+              LrDialogs.message("Open map picker",
+                "Could not read the bundled map picker.", "warning")
+              return
+            end
+            local html = fh:read("*a")
+            fh:close()
+            local css = file_url(LrPathUtils.child(dir, "leaflet.css"))
+            local js = file_url(LrPathUtils.child(dir, "leaflet.js"))
+            html = html:gsub('href="leaflet%.css"', function()
+              return 'href="' .. css .. '"' end)
+            html = html:gsub('src="leaflet%.js"', function()
+              return 'src="' .. js .. '"' end)
+            html = html:gsub("__START_LAT__", function()
+              return tostring(args.current_lat) end)
+            html = html:gsub("__START_LON__", function()
+              return tostring(args.current_lon) end)
+            local out = LrPathUtils.child(
+              LrPathUtils.getStandardFilePath("temp"),
+              string.format("phone_geotagger_map_%d.html", math.random(1000000000)))
+            local wf, werr = io.open(out, "wb")
+            if not wf then
+              LrDialogs.message("Open map picker",
+                "Could not write the map file: " .. tostring(werr), "warning")
+              return
+            end
+            wf:write(html)
+            wf:close()
+            LrHttp.openUrlInBrowser(file_url(out))
           end,
         },
       },
