@@ -1,24 +1,13 @@
 local LrApplication = import "LrApplication"
 local LrTasks = import "LrTasks"
 local LrDialogs = import "LrDialogs"
-local LrHttp = import "LrHttp"
 local LrProgressScope = import "LrProgressScope"
 local LrPrefs = import "LrPrefs"
 
-local geocode_client = require "geocode_client"
-local place_extract = require "place_extract"
-local geo_cache = require "geo_cache"
 local collection_name = require "collection_name"
-local plugin_paths = require "plugin_paths"
 local LocationDialog = require "LocationDialog"
 
-local USER_AGENT = "PhoneGeotagger/0.1 (github.com/mssadik73/phone-geotagger)"
 local FLUSH_SIZE = 500
-
-local function http_get(url)
-  local body = LrHttp.get(url, { { field = "User-Agent", value = USER_AGENT } })
-  return body
-end
 
 LrTasks.startAsyncTask(function()
   local progress
@@ -36,36 +25,33 @@ LrTasks.startAsyncTask(function()
     if not settings then return end
     local fmt = { primary = settings.primary, secondary = settings.secondary }
 
-    local cache_path = plugin_paths.geocode_cache_path()
-    local cache = geo_cache.load(cache_path)
+    local meta = catalog:batchGetFormattedMetadata(photos,
+      { "location", "city", "state", "country" })
 
-    -- Ensure the parent collection set exists.
     local set
     catalog:withWriteAccessDo("Location collections set", function()
       set = catalog:createCollectionSet(settings.set_name, nil, true)
     end)
 
-    local colls = {}   -- name -> LrCollection (created lazily, reused across flushes)
-    local pending = {} -- name -> { photo, ... } buffered for the next flush
+    local colls = {}
+    local pending = {}
     local pending_n = 0
-    local added, unresolved, no_gps = 0, 0, 0
+    local added, unresolved = 0, 0
 
     local function flush()
-      if pending_n > 0 then
-        catalog:withWriteAccessDo("Add photos to location collections", function()
-          for name, list in pairs(pending) do
-            local coll = colls[name]
-            if not coll then
-              coll = catalog:createCollection(name, set, true)
-              colls[name] = coll
-            end
-            coll:addPhotos(list)
+      if pending_n == 0 then return end
+      catalog:withWriteAccessDo("Add photos to location collections", function()
+        for name, list in pairs(pending) do
+          local coll = colls[name]
+          if not coll then
+            coll = catalog:createCollection(name, set, true)
+            colls[name] = coll
           end
-        end)
-        pending = {}
-        pending_n = 0
-      end
-      geo_cache.save(cache_path, cache)
+          coll:addPhotos(list)
+        end
+      end)
+      pending = {}
+      pending_n = 0
     end
 
     progress = LrProgressScope { title = "Building location collections" }
@@ -73,32 +59,19 @@ LrTasks.startAsyncTask(function()
 
     for i, photo in ipairs(photos) do
       if progress:isCanceled() then break end
-      local g = photo:getRawMetadata("gps")
-      if not (g and g.latitude and g.longitude) then
-        no_gps = no_gps + 1
+      local m = meta[photo] or {}
+      local place = {
+        poi = m.location, city = m.city, state = m.state, country = m.country,
+      }
+      local name = collection_name.of(place, fmt)
+      if name then
+        pending[name] = pending[name] or {}
+        pending[name][#pending[name] + 1] = photo
+        pending_n = pending_n + 1
+        added = added + 1
+        if pending_n >= FLUSH_SIZE then flush() end
       else
-        local place = geo_cache.get(cache, g.latitude, g.longitude)
-        if not place then
-          local addr = geocode_client.reverse(http_get, settings.endpoint,
-            g.latitude, g.longitude)
-          if addr then
-            place = place_extract.extract(addr)
-            geo_cache.put(cache, g.latitude, g.longitude, place)
-          else
-            place = {}
-          end
-          LrTasks.sleep(1.1) -- Nominatim: <= 1 req/sec, only on a real lookup
-        end
-        local name = collection_name.of(place, fmt)
-        if name then
-          pending[name] = pending[name] or {}
-          pending[name][#pending[name] + 1] = photo
-          pending_n = pending_n + 1
-          added = added + 1
-          if pending_n >= FLUSH_SIZE then flush() end
-        else
-          unresolved = unresolved + 1
-        end
+        unresolved = unresolved + 1
       end
       progress:setPortionComplete(i, #photos)
     end
@@ -112,8 +85,8 @@ LrTasks.startAsyncTask(function()
     LrDialogs.message("Create Location Collections",
       string.format(
         "Added %d photo(s) to %d location collection(s) under \"%s\".\n"
-        .. "%d unresolved, %d without GPS.",
-        added, n_colls, settings.set_name, unresolved, no_gps), "info")
+        .. "%d had no resolved location (re-geotag them first).",
+        added, n_colls, settings.set_name, unresolved), "info")
   end)
   if progress then progress:done() end
   if not ok then
