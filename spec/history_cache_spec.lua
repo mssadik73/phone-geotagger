@@ -58,4 +58,21 @@ describe("history_cache", function()
     local f = assert(io.open(path, "w")); f:write("not json"); f:close()
     assert.same({ points = {}, visits = {} }, history_cache.load(path))
   end)
+
+  it("saves without os.rename/os.remove (Lightroom sandbox)", function()
+    local real_rename, real_remove = os.rename, os.remove
+    os.rename, os.remove = nil, nil
+    finally(function() os.rename, os.remove = real_rename, real_remove end)
+
+    local data = {
+      points = { { t = 100, lat = 10.5, lon = 20.5 } },
+      visits = { { start_t = 100, end_t = 200, place_id = "A", lat = 1, lon = 2 } },
+    }
+    assert.is_true(history_cache.save(path, data))
+
+    os.rename, os.remove = real_rename, real_remove -- restore for load/cleanup
+    local loaded = history_cache.load(path)
+    assert.equals(100, loaded.points[1].t)
+    assert.equals("A", loaded.visits[1].place_id)
+  end)
 end)
