@@ -17,8 +17,8 @@ function place_extract.extract(address)
   local sub = first(address, { "neighbourhood", "suburb", "quarter", "city_district" })
     or city
   return {
-    country = (address.country ~= "" and address.country) or nil,
-    state = (address.state ~= "" and address.state) or nil,
+    country = first(address, { "country" }),
+    state = first(address, { "state" }),
     city = city,
     sublocation = sub,
   }
