@@ -1,0 +1,16 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  busted:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        luaVersion: ["5.1", "5.4"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: ${{ matrix.luaVersion }}
+      - uses: leafo/gh-actions-luarocks@v4
+      - run: luarocks install busted
+      - run: busted

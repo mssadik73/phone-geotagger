@@ -1,0 +1,8 @@
+return {
+  _all = {
+    lpath = "PhoneGeotagger.lrplugin/?.lua",
+  },
+  default = {
+    verbose = true,
+  },
+}
