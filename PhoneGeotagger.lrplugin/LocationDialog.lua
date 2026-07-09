@@ -15,9 +15,11 @@ function LocationDialog.run(args)
     local f = LrView.osFactory()
     local bind = LrView.bind
     local props = LrBinding.makePropertyTable(context)
-    props.set_name = prefs.loc_set_name or "Geo Locations"
+    props.set_name = (prefs.loc_set_name and prefs.loc_set_name ~= "" and prefs.loc_set_name)
+      or "Geo Locations"
     props.overwrite = prefs.loc_overwrite or false
-    props.endpoint = prefs.loc_endpoint or "https://nominatim.openstreetmap.org/reverse"
+    props.endpoint = (prefs.loc_endpoint and prefs.loc_endpoint ~= "" and prefs.loc_endpoint)
+      or "https://nominatim.openstreetmap.org/reverse"
 
     local est = math.ceil(args.unique_count * 1.1)
     local contents = f:column {
@@ -48,6 +50,11 @@ function LocationDialog.run(args)
       actionVerb = "Create Collections",
     }
     if action ~= "ok" then return end
+
+    if props.set_name == nil or props.set_name == "" then props.set_name = "Geo Locations" end
+    if props.endpoint == nil or props.endpoint == "" then
+      props.endpoint = "https://nominatim.openstreetmap.org/reverse"
+    end
 
     prefs.loc_set_name = props.set_name
     prefs.loc_overwrite = props.overwrite and true or false

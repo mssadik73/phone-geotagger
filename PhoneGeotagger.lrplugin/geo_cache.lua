@@ -14,6 +14,7 @@ function geo_cache.load(path)
   if not f then return {} end
   local text = f:read("*a")
   f:close()
+  if not text then return {} end
   local t = dkjson.decode(text)
   if type(t) ~= "table" then return {} end
   return t
