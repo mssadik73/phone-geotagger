@@ -53,4 +53,21 @@ describe("history_cache", function()
     })
     assert.same({ count = 2, first_t = 100, last_t = 900 }, cov)
   end)
+
+  it("saves without os.rename/os.remove (Lightroom sandbox)", function()
+    -- Lightroom's Lua strips os.rename/os.remove; save must fall back to a
+    -- direct write instead of the atomic tmp+rename.
+    local real_rename, real_remove = os.rename, os.remove
+    os.rename, os.remove = nil, nil
+    finally(function() os.rename, os.remove = real_rename, real_remove end)
+
+    local points = { { t = 100, lat = 10.5, lon = 20.5 } }
+    assert.is_true(history_cache.save(path, points))
+
+    os.rename, os.remove = real_rename, real_remove -- restore for load/cleanup
+    local loaded = history_cache.load(path)
+    assert.equals(1, #loaded)
+    assert.equals(100, loaded[1].t)
+    assert.near(10.5, loaded[1].lat, 1e-6)
+  end)
 end)

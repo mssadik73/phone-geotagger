@@ -41,16 +41,21 @@ end
 
 -- Writes to path..".tmp" then renames, so a crash can't truncate the cache.
 function history_cache.save(path, points)
-  local tmp = path .. ".tmp"
-  local f, err = io.open(tmp, "w")
+  -- Prefer an atomic tmp+rename; fall back to a direct write where os.rename
+  -- is unavailable (Lightroom's Lua sandbox has no os.rename/os.remove).
+  local atomic = os.rename ~= nil
+  local target = atomic and (path .. ".tmp") or path
+  local f, err = io.open(target, "w")
   if not f then return nil, err end
   for _, p in ipairs(points) do
     f:write(string.format("%d,%.7f,%.7f\n", p.t, p.lat, p.lon))
   end
   f:close()
-  os.remove(path) -- Windows os.rename refuses to overwrite
-  local ok, rerr = os.rename(tmp, path)
-  if not ok then return nil, rerr end
+  if atomic then
+    if os.remove then os.remove(path) end -- Windows os.rename won't overwrite
+    local ok, rerr = os.rename(target, path)
+    if not ok then return nil, rerr end
+  end
   return true
 end
 

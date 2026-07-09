@@ -28,20 +28,25 @@ function geo_cache.put(cache, lat, lon, place)
   cache[geo_cache.key(lat, lon)] = place
 end
 
--- Writes path..".tmp" then renames, so a crash can't truncate the cache.
+-- Prefers an atomic tmp+rename so a crash can't truncate the cache; falls back
+-- to a direct write where os.rename is unavailable (Lightroom's Lua sandbox
+-- has no os.rename/os.remove).
 function geo_cache.save(path, cache)
-  local tmp = path .. ".tmp"
-  local f, err = io.open(tmp, "w")
+  local atomic = os.rename ~= nil
+  local target = atomic and (path .. ".tmp") or path
+  local f, err = io.open(target, "w")
   if not f then return nil, err end
   local wrote, werr = f:write(dkjson.encode(cache, { indent = false }))
   f:close()
   if not wrote then
-    os.remove(tmp)
+    if os.remove then os.remove(target) end
     return nil, werr
   end
-  os.remove(path) -- Windows os.rename refuses to overwrite
-  local ok, rerr = os.rename(tmp, path)
-  if not ok then return nil, rerr end
+  if atomic then
+    if os.remove then os.remove(path) end -- Windows os.rename won't overwrite
+    local ok, rerr = os.rename(target, path)
+    if not ok then return nil, rerr end
+  end
   return true
 end
 
