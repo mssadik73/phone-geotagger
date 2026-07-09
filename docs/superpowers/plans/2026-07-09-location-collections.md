@@ -417,7 +417,7 @@ git commit -m "feat: geo_cache persistent coordinate-to-place cache"
 **Interfaces:**
 - Produces:
   - `smartcoll_rules.build(sublocation, city)` → a Lightroom smart-collection search-description table: `{ combine = "intersect", { criteria = "location", operation = "==", value = sublocation }, [ { criteria = "city", operation = "==", value = city } ] }`. The city criterion is omitted when `city` is nil/empty.
-  - `smartcoll_rules.names(pairs)` → given a list of `{ sublocation, city }`, returns a parallel list of `{ sublocation, city, name }` where `name` is the sublocation, disambiguated to `"<sublocation> (<city>)"` only when the same sublocation appears for more than one city.
+  - `smartcoll_rules.names(place_pairs)` → given a list of `{ sublocation, city }`, returns a parallel list of `{ sublocation, city, name }` where `name` is the sublocation, disambiguated to `"<sublocation> (<city>)"` only when the same sublocation appears for more than one city.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -497,16 +497,16 @@ end
 
 -- Given { {sublocation, city}, ... }, returns { {sublocation, city, name}, ... }
 -- disambiguating a sublocation shared across cities as "<sub> (<city>)".
-function smartcoll_rules.names(pairs)
+function smartcoll_rules.names(place_pairs)
   local cities_for = {}
-  for _, p in ipairs(pairs) do
+  for _, p in ipairs(place_pairs) do
     cities_for[p.sublocation] = cities_for[p.sublocation] or {}
     if p.city and p.city ~= "" then
       cities_for[p.sublocation][p.city] = true
     end
   end
   local out = {}
-  for i, p in ipairs(pairs) do
+  for i, p in ipairs(place_pairs) do
     local count = 0
     for _ in pairs(cities_for[p.sublocation]) do count = count + 1 end
     local name = p.sublocation

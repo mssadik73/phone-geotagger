@@ -67,8 +67,12 @@ LrTasks.startAsyncTask(function()
     local place = geo_cache.get(cache, coord.lat, coord.lon)
     if not place then
       local addr = geocode_client.reverse(http_get, settings.endpoint, coord.lat, coord.lon)
-      place = addr and place_extract.extract(addr) or {}
-      geo_cache.put(cache, coord.lat, coord.lon, place)
+      if addr then
+        place = place_extract.extract(addr)
+        geo_cache.put(cache, coord.lat, coord.lon, place)
+      else
+        place = {} -- failed lookup: leave uncached so it retries next run
+      end
       LrTasks.sleep(1.1) -- Nominatim: <= 1 req/sec, only on a real lookup
     end
     if not (place.sublocation or place.city) then unresolved = unresolved + 1 end
