@@ -3,20 +3,17 @@ local LrBinding = import "LrBinding"
 local LrDialogs = import "LrDialogs"
 local LrFunctionContext = import "LrFunctionContext"
 local LrTasks = import "LrTasks"
-local LrPathUtils = import "LrPathUtils"
 
 local tz_offsets = require "tz_offsets"
 local history_cache = require "history_cache"
 local timeline_parser = require "timeline_parser"
-local adb_client = require "adb_client"
-local LrExec = require "LrExec"
 
 local GeotagDialog = {}
 
 local function coverage_text(points)
   local cov = history_cache.coverage(points)
   if not cov then
-    return "Cache: empty — pull from phone or import a file"
+    return "Cache: empty — import a Timeline export file"
   end
   return string.format("Cache: %d points, %s → %s", cov.count,
     os.date("!%Y-%m-%d", cov.first_t), os.date("!%Y-%m-%d", cov.last_t))
@@ -40,8 +37,6 @@ function GeotagDialog.run(args)
     props.drift = prefs.drift or 0
     props.max_gap_min = prefs.max_gap_min or 15
     props.overwrite = prefs.overwrite or false
-    props.adb_path = prefs.adb_path or "adb"
-    props.phone_path = prefs.phone_path or "/sdcard/Download/Timeline.json"
     props.coverage = coverage_text(points)
 
     local function absorb_file(file_path)
@@ -73,47 +68,20 @@ function GeotagDialog.run(args)
         title = "Location history",
         fill_horizontal = 1,
         f:static_text { title = bind "coverage", fill_horizontal = 1 },
-        f:row {
-          f:push_button {
-            title = "Pull latest from phone (ADB)",
-            action = function()
+        f:push_button {
+          title = "Import file…",
+          action = function()
+            local files = LrDialogs.runOpenPanel {
+              title = "Choose Timeline export",
+              allowsMultipleSelection = false,
+              canChooseDirectories = false,
+            }
+            if files and files[1] then
               LrTasks.startAsyncTask(function()
-                local tmp = LrPathUtils.child(
-                  LrPathUtils.getStandardFilePath("temp"),
-                  "phone_geotagger_pull.json")
-                local ok, _, msg = adb_client.pull(
-                  LrExec.execute, props.adb_path, props.phone_path, tmp)
-                if not ok then
-                  LrDialogs.message("ADB pull failed", msg, "warning")
-                  return
-                end
-                absorb_file(tmp)
+                absorb_file(files[1])
               end)
-            end,
-          },
-          f:push_button {
-            title = "Import file…",
-            action = function()
-              local files = LrDialogs.runOpenPanel {
-                title = "Choose Timeline export",
-                allowsMultipleSelection = false,
-                canChooseDirectories = false,
-              }
-              if files and files[1] then
-                LrTasks.startAsyncTask(function()
-                  absorb_file(files[1])
-                end)
-              end
-            end,
-          },
-        },
-        f:row {
-          f:static_text { title = "adb path:" },
-          f:edit_field { value = bind "adb_path", fill_horizontal = 1 },
-        },
-        f:row {
-          f:static_text { title = "On-phone export path:" },
-          f:edit_field { value = bind "phone_path", fill_horizontal = 1 },
+            end
+          end,
         },
       },
 
@@ -185,8 +153,6 @@ function GeotagDialog.run(args)
     prefs.drift = props.drift
     prefs.max_gap_min = props.max_gap_min
     prefs.overwrite = props.overwrite and true or false
-    prefs.adb_path = props.adb_path
-    prefs.phone_path = props.phone_path
 
     local override
     if props.mode == "home" then

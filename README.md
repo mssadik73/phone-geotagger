@@ -8,19 +8,33 @@ along.
 ## How it works
 
 1. On your phone, export your Timeline data
-   (**Settings → Location → Timeline → Export Timeline data**) and save the
-   JSON to `Download/Timeline.json`.
+   (**Settings → Location → Timeline → Export Timeline data**) to a JSON file,
+   and get that file onto your computer by whatever means you prefer (see
+   [Getting the Timeline file to your computer](#getting-the-timeline-file-to-your-computer)).
 2. In Lightroom Classic, select photos and run
    **Library → Plug-in Extras → Geotag from Phone Timeline...**
-3. Click **Pull latest from phone (ADB)** (or **Import file…** to browse to a
-   copy of the export).
+3. Click **Import file…** and choose your Timeline export.
 4. Click **Geotag**. Each photo's capture time is converted to UTC and matched
    against your location track; matched photos get GPS coordinates written to
    the catalog.
 
 Every export you import is merged into a local **history cache**, so you can
-geotag old photos any time without the phone connected — as long as some past
-export covered those dates.
+geotag old photos any time — as long as some past export covered those dates.
+
+## Getting the Timeline file to your computer
+
+Any method works — the plugin just needs the JSON file on disk. A convenient
+one:
+
+1. On the phone, export the Timeline data and save/share it to **Google
+   Drive**.
+2. Install **Google Drive for desktop** and let it sync, so the file appears
+   in your Google Drive folder on the computer automatically.
+3. In the plugin, **Import file…** and browse to the synced file.
+
+You can equally AirDrop it, email it to yourself, copy it over USB as a plain
+file, or use any cloud service — there's no phone connection or special setup
+required.
 
 ## Correcting a wrong geotag
 
@@ -66,13 +80,9 @@ endpoint** field at your own Nominatim instance.
 1. Download or clone this repository.
 2. Lightroom Classic → **File → Plug-in Manager → Add** → select the
    `PhoneGeotagger.lrplugin` folder.
-3. For ADB pulls: install [Android platform-tools](https://developer.android.com/tools/releases/platform-tools),
-   enable **USB debugging** on the phone (Settings → Developer options), and
-   accept the authorization prompt when you first connect. If `adb` isn't on
-   your PATH, set its full path in the plugin dialog.
 
-The file-import path works with zero setup — you can always skip ADB and copy
-the export JSON to your computer manually.
+No other setup is required — you just need your exported Timeline JSON on disk
+(see [above](#getting-the-timeline-file-to-your-computer)).
 
 ## The timezone model (please read once)
 
