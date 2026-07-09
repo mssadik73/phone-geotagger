@@ -13,17 +13,15 @@ local function data_dir()
   return dir
 end
 
--- Absolute path to the accumulated GPS history cache CSV.
+-- Accumulated Timeline history (points + visits), JSON. "-v2" because the
+-- format changed from a points-only CSV to a JSON object with visits/placeIds.
 function plugin_paths.cache_path()
-  return LrPathUtils.child(data_dir(), "history.csv")
+  return LrPathUtils.child(data_dir(), "history-v2.json")
 end
 
--- Absolute path to the reverse-geocode (coordinate -> place) cache JSON.
--- "-v2" because the place shape changed (sublocation is now the raw
--- neighborhood, no city fallback); the old geocode.json is abandoned so
--- entries rebuild under the new contract instead of producing doubled names.
-function plugin_paths.geocode_cache_path()
-  return LrPathUtils.child(data_dir(), "geocode-v2.json")
+-- Resolution cache: placeId/coordinate -> resolved place, JSON.
+function plugin_paths.resolve_cache_path()
+  return LrPathUtils.child(data_dir(), "resolve-v1.json")
 end
 
 return plugin_paths
