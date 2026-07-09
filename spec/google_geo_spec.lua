@@ -105,6 +105,13 @@ describe("google_geo.text_search", function()
     local body = c.body:gsub("%s", "")
     assert.matches('"textQuery":"goldengate"', body)
     assert.matches("locationBias", body)
+    local hkey, hmask
+    for _, h in ipairs(c.headers) do
+      if h.field == "X-Goog-Api-Key" then hkey = h.value end
+      if h.field == "X-Goog-FieldMask" then hmask = h.value end
+    end
+    assert.equals("KEY", hkey)
+    assert.equals("places.id,places.displayName,places.location,places.addressComponents", hmask)
   end)
 
   it("omits the bias when lat/lon are nil", function()

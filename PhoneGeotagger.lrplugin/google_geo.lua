@@ -1,6 +1,6 @@
--- Google geocoding: nearest notable POI (Places API New) plus a reverse
--- Geocoding fallback for city/state/country. HTTP is injected so this module
--- stays Lightroom-free and unit-testable.
+-- Google geocoding: Place Details (placeId -> place), Text Search (query ->
+-- places), and reverse Geocoding (coordinate -> city/state/country). HTTP is
+-- injected so this module stays Lightroom-free and unit-testable.
 
 local dkjson = require "dkjson"
 
