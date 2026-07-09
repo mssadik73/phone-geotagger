@@ -41,6 +41,26 @@ The map picker hands the coordinate back through your system clipboard, so no
 typing is needed. The corrected coordinates are written to the catalog; use
 **Metadata → Save Metadata to File** to push them into your files/XMP.
 
+## Organizing photos into location collections
+
+Turn GPS coordinates into browsable, auto-updating Smart Collections named for
+real places.
+
+1. Select geotagged photos and run **Library → Plug-in Extras → Create
+   Location Collections...**.
+2. The plugin reverse-geocodes each location via OpenStreetMap, writes the
+   Country / State / City / Sublocation IPTC fields, and creates a **Geo
+   Locations** collection set with one Smart Collection per neighborhood.
+
+Because the collections are Smart Collections keyed on the place-name fields,
+they update themselves as you geocode more photos. Locations are cached
+locally, so repeat runs and photos that share a spot cost no extra lookups.
+
+**Note on the geocoder:** the default endpoint is the public OpenStreetMap
+Nominatim service, which asks for at most one request per second — the plugin
+throttles accordingly. For large libraries you can point the **Geocoder
+endpoint** field at your own Nominatim instance.
+
 ## Installation
 
 1. Download or clone this repository.
@@ -113,6 +133,7 @@ The Lightroom-facing layer (`Info.lua`, `GeotagMenuItem.lua`,
 - JSON parsing by [dkjson](http://dkolf.de/dkjson-lua/) (David Kolf, MIT).
 - Map picker built with [Leaflet](https://leafletjs.com/) (BSD-2-Clause) and
   [OpenStreetMap](https://www.openstreetmap.org/) tiles and search.
+- Reverse geocoding by [OpenStreetMap Nominatim](https://nominatim.org/).
 
 ## License
 
