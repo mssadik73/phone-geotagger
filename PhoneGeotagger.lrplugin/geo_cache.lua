@@ -32,8 +32,12 @@ function geo_cache.save(path, cache)
   local tmp = path .. ".tmp"
   local f, err = io.open(tmp, "w")
   if not f then return nil, err end
-  f:write(dkjson.encode(cache, { indent = false }))
+  local wrote, werr = f:write(dkjson.encode(cache, { indent = false }))
   f:close()
+  if not wrote then
+    os.remove(tmp)
+    return nil, werr
+  end
   os.remove(path) -- Windows os.rename refuses to overwrite
   local ok, rerr = os.rename(tmp, path)
   if not ok then return nil, rerr end
