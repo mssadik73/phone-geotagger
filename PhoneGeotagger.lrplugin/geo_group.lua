@@ -2,6 +2,9 @@
 
 local geo_group = {}
 
+-- atan2: math.atan2 on Lua 5.1 (Lightroom), two-arg math.atan on 5.3+
+local atan2 = math.atan2 or math.atan
+
 local R = 6371000 -- mean Earth radius, meters
 local RAD = math.pi / 180
 
@@ -11,7 +14,7 @@ function geo_group.haversine(lat1, lon1, lat2, lon2)
   local dlon = (lon2 - lon1) * RAD
   local a = math.sin(dlat / 2) ^ 2
     + math.cos(lat1 * RAD) * math.cos(lat2 * RAD) * math.sin(dlon / 2) ^ 2
-  local c = 2 * math.atan(math.sqrt(a), math.sqrt(1 - a))
+  local c = 2 * atan2(math.sqrt(a), math.sqrt(1 - a))
   return R * c
 end
 
