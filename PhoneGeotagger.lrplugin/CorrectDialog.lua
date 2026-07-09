@@ -4,6 +4,7 @@ local LrDialogs = import "LrDialogs"
 local LrFunctionContext = import "LrFunctionContext"
 local LrHttp = import "LrHttp"
 local LrPathUtils = import "LrPathUtils"
+local LrTasks = import "LrTasks"
 
 local clipboard = require "clipboard"
 local coord_parse = require "coord_parse"
@@ -62,7 +63,13 @@ function CorrectDialog.run(args)
           title = "Open map picker",
           action = function()
             local html = LrPathUtils.child(_PLUGIN.path, "mappicker.html")
-            local url = "file://" .. html .. "?lat=" .. tostring(args.current_lat)
+            html = html:gsub("\\", "/")
+            -- percent-encode characters that break a file URL, keeping / and : and . and -
+            html = html:gsub("[^%w/%:%.%-_]", function(ch)
+              return string.format("%%%02X", string.byte(ch))
+            end)
+            local url = "file:///" .. html:gsub("^/", "")
+              .. "?lat=" .. tostring(args.current_lat)
               .. "&lon=" .. tostring(args.current_lon)
             LrHttp.openUrlInBrowser(url)
           end,
@@ -72,18 +79,20 @@ function CorrectDialog.run(args)
         f:push_button {
           title = "Use location from map",
           action = function()
-            local text = clipboard.read(LrExec.execute, WIN_ENV == true)
-            local lat, lon = coord_parse.parse(text)
-            if not lat then
-              LrDialogs.message("Use location from map",
-                "No coordinates on the clipboard yet. In the map, drag the pin "
-                .. "or click the correct spot, then try again.", "warning")
-              return
-            end
-            props.map_lat = lat
-            props.map_lon = lon
-            props.map_label = fmt(lat, lon)
-            props.source = "map"
+            LrTasks.startAsyncTask(function()
+              local text = clipboard.read(LrExec.execute, WIN_ENV == true)
+              local lat, lon = coord_parse.parse(text)
+              if not lat then
+                LrDialogs.message("Use location from map",
+                  "No coordinates on the clipboard yet. In the map, drag the pin "
+                  .. "or click the correct spot, then try again.", "warning")
+                return
+              end
+              props.map_lat = lat
+              props.map_lon = lon
+              props.map_label = fmt(lat, lon)
+              props.source = "map"
+            end)
           end,
         },
         f:static_text { title = bind "map_label", fill_horizontal = 1 },

@@ -16,7 +16,7 @@ LrTasks.startAsyncTask(function()
   end
 
   local gps = example:getRawMetadata("gps")
-  if not gps or not gps.latitude then
+  if not gps or not gps.latitude or not gps.longitude then
     LrDialogs.message("Find Photos With This Geotag",
       "This photo has no geotag to match.", "info")
     return
@@ -27,7 +27,7 @@ LrTasks.startAsyncTask(function()
   local matches = {}
   for photo, m in pairs(meta) do
     local g = m.gps
-    if g and g.latitude then
+    if g and g.latitude and g.longitude then
       if geo_group.haversine(gps.latitude, gps.longitude, g.latitude, g.longitude)
           <= TOLERANCE_M then
         matches[#matches + 1] = photo

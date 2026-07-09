@@ -570,7 +570,7 @@ Expected: `OK`. (Leaflet is BSD-2-Clause — compatible with this repo's MIT lic
       var text = ll.lat.toFixed(6) + ", " + ll.lng.toFixed(6);
       copy(text);
       document.getElementById("status").textContent =
-        "Copied ✓  " + text + "  — switch back to Lightroom and click “Use location from map”.";
+        “Copied ✓  “ + text + “  — switch back to Lightroom and click \”Use location from map\”.”;
     }
 
     pick(marker.getLatLng());
@@ -781,6 +781,7 @@ local LrDialogs = import "LrDialogs"
 local LrFunctionContext = import "LrFunctionContext"
 local LrHttp = import "LrHttp"
 local LrPathUtils = import "LrPathUtils"
+local LrTasks = import "LrTasks"
 
 local clipboard = require "clipboard"
 local coord_parse = require "coord_parse"
@@ -849,18 +850,20 @@ function CorrectDialog.run(args)
         f:push_button {
           title = "Use location from map",
           action = function()
-            local text = clipboard.read(LrExec.execute, WIN_ENV == true)
-            local lat, lon = coord_parse.parse(text)
-            if not lat then
-              LrDialogs.message("Use location from map",
-                "No coordinates on the clipboard yet. In the map, drag the pin "
-                .. "or click the correct spot, then try again.", "warning")
-              return
-            end
-            props.map_lat = lat
-            props.map_lon = lon
-            props.map_label = fmt(lat, lon)
-            props.source = "map"
+            LrTasks.startAsyncTask(function()
+              local text = clipboard.read(LrExec.execute, WIN_ENV == true)
+              local lat, lon = coord_parse.parse(text)
+              if not lat then
+                LrDialogs.message("Use location from map",
+                  "No coordinates on the clipboard yet. In the map, drag the pin "
+                  .. "or click the correct spot, then try again.", "warning")
+                return
+              end
+              props.map_lat = lat
+              props.map_lon = lon
+              props.map_label = fmt(lat, lon)
+              props.source = "map"
+            end)
           end,
         },
         f:static_text { title = bind "map_label", fill_horizontal = 1 },

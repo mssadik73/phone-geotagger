@@ -9,6 +9,11 @@ local CorrectDialog = require "CorrectDialog"
 
 LrTasks.startAsyncTask(function()
   local catalog = LrApplication.activeCatalog()
+  if catalog:getTargetPhoto() == nil then
+    LrDialogs.message("Correct Geotag",
+      "Select the photos to correct in the Library grid first.", "info")
+    return
+  end
   local photos = catalog:getTargetPhotos()
   if not photos or #photos == 0 then
     LrDialogs.message("Correct Geotag",
@@ -17,7 +22,7 @@ LrTasks.startAsyncTask(function()
   end
 
   local gps = photos[1]:getRawMetadata("gps")
-  if not gps or not gps.latitude then
+  if not gps or not gps.latitude or not gps.longitude then
     LrDialogs.message("Correct Geotag",
       "The first selected photo has no geotag. Select photos that already "
       .. "have the tag you want to correct.", "info")
