@@ -68,8 +68,10 @@ function CorrectDialog.run(args)
             html = html:gsub("[^%w/%:%.%-_]", function(ch)
               return string.format("%%%02X", string.byte(ch))
             end)
+            -- Pass coords in the URL hash, not a query string: macOS drops
+            -- the "?query" when opening a local file:// URL, but keeps "#hash".
             local url = "file:///" .. html:gsub("^/", "")
-              .. "?lat=" .. tostring(args.current_lat)
+              .. "#lat=" .. tostring(args.current_lat)
               .. "&lon=" .. tostring(args.current_lon)
             LrHttp.openUrlInBrowser(url)
           end,
