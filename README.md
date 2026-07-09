@@ -57,18 +57,23 @@ typing is needed. The corrected coordinates are written to the catalog; use
 
 ## Organizing photos into location collections
 
-Turn GPS coordinates into browsable, auto-updating Smart Collections named for
-real places.
+Turn GPS coordinates into browsable collections named for real places.
 
 1. Select geotagged photos and run **Library → Plug-in Extras → Create
    Location Collections...**.
-2. The plugin reverse-geocodes each location via OpenStreetMap, writes the
-   Country / State / City / Sublocation IPTC fields, and creates a **Geo
-   Locations** collection set with one Smart Collection per neighborhood.
+2. Choose the **collection name format** — a primary level (Neighborhood /
+   City / State / Country) and an optional secondary level for context. The
+   default is `Neighborhood, City`. The plugin reverse-geocodes each photo via
+   OpenStreetMap and adds it to a collection named by that format (e.g.
+   `Venice Beach, Los Angeles`), falling back to the finest available level for
+   photos that lack the chosen one. All the collections live in a **Geo
+   Locations** collection set.
 
-Because the collections are Smart Collections keyed on the place-name fields,
-they update themselves as you geocode more photos. Locations are cached
-locally, so repeat runs and photos that share a spot cost no extra lookups.
+These are regular collections (a snapshot of the photos you ran it on), so
+re-run the command after geotagging more photos to fold them in — photos
+already in a collection are left as-is. Locations are cached locally, so
+repeat runs and photos that share a spot cost no extra lookups, and very large
+selections are processed in bounded batches to keep memory flat.
 
 **Note on the geocoder:** the default endpoint is the public OpenStreetMap
 Nominatim service, which asks for at most one request per second — the plugin
