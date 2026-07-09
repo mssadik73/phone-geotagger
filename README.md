@@ -22,6 +22,25 @@ Every export you import is merged into a local **history cache**, so you can
 geotag old photos any time without the phone connected — as long as some past
 export covered those dates.
 
+## Correcting a wrong geotag
+
+Google Timeline sometimes snaps a location to a nearby-but-wrong place. Two
+commands fix that:
+
+1. Select one photo carrying the bad tag and run **Library → Plug-in Extras →
+   Find Photos With This Geotag**. Every photo within 25 m of it is selected
+   in the grid. Deselect any that don't belong.
+2. Run **Correct Geotag of Selection...**. Choose the true location either
+   from nearby Timeline history points or with the built-in map picker:
+   **Open map picker** launches a map in your browser with a pin on the
+   current location — drag it to the correct spot (or search a place), then
+   back in Lightroom click **Use location from map**. Click **Apply** to write
+   the corrected coordinate to every selected photo.
+
+The map picker hands the coordinate back through your system clipboard, so no
+typing is needed. The corrected coordinates are written to the catalog; use
+**Metadata → Save Metadata to File** to push them into your files/XMP.
+
 ## Installation
 
 1. Download or clone this repository.
@@ -92,6 +111,8 @@ The Lightroom-facing layer (`Info.lua`, `GeotagMenuItem.lua`,
 ## Credits
 
 - JSON parsing by [dkjson](http://dkolf.de/dkjson-lua/) (David Kolf, MIT).
+- Map picker built with [Leaflet](https://leafletjs.com/) (BSD-2-Clause) and
+  [OpenStreetMap](https://www.openstreetmap.org/) tiles and search.
 
 ## License
 
