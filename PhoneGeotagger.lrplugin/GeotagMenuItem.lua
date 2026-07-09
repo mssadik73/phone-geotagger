@@ -10,6 +10,7 @@ local time_resolver = require "time_resolver"
 local tz_offsets = require "tz_offsets"
 local GeotagDialog = require "GeotagDialog"
 local plugin_paths = require "plugin_paths"
+local coord_round = require "coord_round"
 
 LrTasks.startAsyncTask(function()
   local catalog = LrApplication.activeCatalog()
@@ -68,6 +69,7 @@ LrTasks.startAsyncTask(function()
           if extra == true then stats.no_tz = stats.no_tz + 1 end
           local lat, lon = matcher.match(settings.points, utc, settings.max_gap_sec)
           if lat then
+            lat, lon = coord_round.round(lat, lon, settings.precision)
             writes[#writes + 1] = { photo = photo, lat = lat, lon = lon }
           else
             stats.unmatched = stats.unmatched + 1

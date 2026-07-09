@@ -38,6 +38,7 @@ function GeotagDialog.run(args)
     props.max_gap_min = prefs.max_gap_min or 15
     props.overwrite = prefs.overwrite or false
     props.coverage = coverage_text(points)
+    props.precision = prefs.precision or 4
 
     local function absorb_file(file_path)
       local fh = io.open(file_path, "rb")
@@ -133,6 +134,17 @@ function GeotagDialog.run(args)
             end,
           },
         },
+        f:row {
+          f:static_text { title = "Location precision:" },
+          f:popup_menu {
+            value = bind "precision",
+            items = {
+              { title = "Exact", value = 8 },
+              { title = "~11 m (4 decimals)", value = 4 },
+              { title = "~110 m (3 decimals)", value = 3 },
+            },
+          },
+        },
         f:checkbox {
           title = "Overwrite existing GPS coordinates",
           value = bind "overwrite",
@@ -153,6 +165,7 @@ function GeotagDialog.run(args)
     prefs.drift = props.drift
     prefs.max_gap_min = props.max_gap_min
     prefs.overwrite = props.overwrite and true or false
+    prefs.precision = props.precision
 
     local override
     if props.mode == "home" then
@@ -168,6 +181,7 @@ function GeotagDialog.run(args)
       drift = tonumber(props.drift) or 0,
       max_gap_sec = (tonumber(props.max_gap_min) or 15) * 60,
       overwrite = props.overwrite and true or false,
+      precision = props.precision,
     }
   end)
 
