@@ -11,14 +11,7 @@ local matcher = require "matcher"
 local time_resolver = require "time_resolver"
 local tz_offsets = require "tz_offsets"
 local GeotagDialog = require "GeotagDialog"
-
-local function cache_path()
-  local base = LrPathUtils.getStandardFilePath("appData")
-    or LrPathUtils.getStandardFilePath("home")
-  local dir = LrPathUtils.child(base, "PhoneGeotagger")
-  LrFileUtils.createAllDirectories(dir)
-  return LrPathUtils.child(dir, "history.csv")
-end
+local plugin_paths = require "plugin_paths"
 
 LrTasks.startAsyncTask(function()
   local catalog = LrApplication.activeCatalog()
@@ -35,7 +28,7 @@ LrTasks.startAsyncTask(function()
   end
 
   local prefs = LrPrefs.prefsForPlugin()
-  local cpath = cache_path()
+  local cpath = plugin_paths.cache_path()
   local points = history_cache.load(cpath)
 
   local settings = GeotagDialog.run {

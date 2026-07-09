@@ -13,6 +13,10 @@ return {
       title = "Find Photos With This Geotag",
       file = "FindGeotagGroupMenuItem.lua",
     },
+    {
+      title = "Correct Geotag of Selection...",
+      file = "CorrectGeotagMenuItem.lua",
+    },
   },
   VERSION = { major = 0, minor = 1, revision = 0 },
 }
