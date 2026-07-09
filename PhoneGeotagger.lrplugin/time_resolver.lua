@@ -14,7 +14,7 @@ function time_resolver.resolve(capture_time, opts)
   local naive, embedded = iso8601.parse(capture_time)
   if not naive then return nil, embedded end
   local offset, used_fallback
-  if opts.override_offset then
+  if opts.override_offset ~= nil then
     offset, used_fallback = opts.override_offset, false
   elseif embedded then
     offset, used_fallback = embedded, false
