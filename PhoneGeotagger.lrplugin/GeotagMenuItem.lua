@@ -1,8 +1,6 @@
 local LrApplication = import "LrApplication"
 local LrTasks = import "LrTasks"
 local LrDialogs = import "LrDialogs"
-local LrPathUtils = import "LrPathUtils"
-local LrFileUtils = import "LrFileUtils"
 local LrPrefs = import "LrPrefs"
 local LrProgressScope = import "LrProgressScope"
 
