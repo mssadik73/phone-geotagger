@@ -13,6 +13,7 @@
       "endTime": "2025-06-01T12:00:00.000+06:00",
       "visit": {
         "topCandidate": {
+          "placeId": "ChIJ_fixture_place",
           "placeLocation": { "latLng": "23.8103000°, 90.4125000°" }
         }
       }
