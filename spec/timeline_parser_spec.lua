@@ -80,4 +80,16 @@ describe("timeline_parser.parse", function()
     assert.is_nil(points)
     assert.matches("semanticSegments", err)
   end)
+
+  it("tolerates a non-table semanticSegments beside a valid rawSignals", function()
+    local json = [[{
+      "semanticSegments": true,
+      "rawSignals": [
+        { "position": { "LatLng": "10.0°, 20.0°", "timestamp": "2025-06-01T00:00:00Z" } }
+      ]
+    }]]
+    local points = assert(timeline_parser.parse(json))
+    assert.equals(1, #points)
+    assert.near(10.0, points[1].lat, 1e-9)
+  end)
 end)

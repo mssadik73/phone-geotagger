@@ -30,9 +30,12 @@ local function add(points, t, lat, lon)
 end
 
 local function parse_ondevice(doc, points)
-  for _, seg in ipairs(doc.semanticSegments or {}) do
+  local segments = type(doc.semanticSegments) == "table" and doc.semanticSegments or {}
+  local signals = type(doc.rawSignals) == "table" and doc.rawSignals or {}
+  for _, seg in ipairs(segments) do
     local seg_start = utc(seg.startTime)
-    for _, entry in ipairs(seg.timelinePath or {}) do
+    local path = type(seg.timelinePath) == "table" and seg.timelinePath or {}
+    for _, entry in ipairs(path) do
       local t = utc(entry.time)
       if not t and entry.durationMinutesOffsetFromStartTime and seg_start then
         local minutes = tonumber(entry.durationMinutesOffsetFromStartTime)
@@ -52,7 +55,7 @@ local function parse_ondevice(doc, points)
       end
     end
   end
-  for _, sig in ipairs(doc.rawSignals or {}) do
+  for _, sig in ipairs(signals) do
     local pos = sig.position
     if pos then
       local lat, lon = parse_latlng(pos.LatLng or pos.latLng)

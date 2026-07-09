@@ -99,7 +99,11 @@ function GeotagDialog.run(args)
                 allowsMultipleSelection = false,
                 canChooseDirectories = false,
               }
-              if files and files[1] then absorb_file(files[1]) end
+              if files and files[1] then
+                LrTasks.startAsyncTask(function()
+                  absorb_file(files[1])
+                end)
+              end
             end,
           },
         },

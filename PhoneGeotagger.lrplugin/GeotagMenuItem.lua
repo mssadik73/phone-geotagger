@@ -22,6 +22,11 @@ end
 
 LrTasks.startAsyncTask(function()
   local catalog = LrApplication.activeCatalog()
+  if catalog:getTargetPhoto() == nil then
+    LrDialogs.message("Phone Geotagger",
+      "Select photos in the Library grid first.", "info")
+    return
+  end
   local photos = catalog:getTargetPhotos()
   if not photos or #photos == 0 then
     LrDialogs.message("Phone Geotagger",
