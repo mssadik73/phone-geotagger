@@ -29,7 +29,10 @@ LrTasks.startAsyncTask(function()
       return
     end
     local photos = catalog:getTargetPhotos()
-    local meta = catalog:batchGetRawMetadata(photos, { "gps", "city", "location" })
+    -- gps is raw metadata; city/location are text IPTC fields readable only as
+    -- FORMATTED metadata ("city"/"location" are not valid getRawMetadata keys).
+    local meta = catalog:batchGetRawMetadata(photos, { "gps" })
+    local fmt = catalog:batchGetFormattedMetadata(photos, { "city", "location" })
 
     -- Collect GPS photos and the unique coordinate buckets among them.
     local gps_photos = {}
@@ -63,7 +66,8 @@ LrTasks.startAsyncTask(function()
     local needed_count = 0
     for _, photo in ipairs(gps_photos) do
       local m = meta[photo]
-      local has_existing = (m.city and m.city ~= "") or (m.location and m.location ~= "")
+      local fm = fmt[photo]
+      local has_existing = (fm.city and fm.city ~= "") or (fm.location and fm.location ~= "")
       if settings.overwrite or not has_existing then
         local k = geo_cache.key(m.gps.latitude, m.gps.longitude)
         if not needed[k] then
@@ -105,9 +109,10 @@ LrTasks.startAsyncTask(function()
     catalog:withWriteAccessDo("Write location metadata", function()
       for _, photo in ipairs(gps_photos) do
         local m = meta[photo]
+        local fm = fmt[photo]
         local g = m.gps
         local place = geo_cache.get(cache, g.latitude, g.longitude)
-        local has_existing = (m.city and m.city ~= "") or (m.location and m.location ~= "")
+        local has_existing = (fm.city and fm.city ~= "") or (fm.location and fm.location ~= "")
         if place and place.sublocation and (settings.overwrite or not has_existing) then
           if place.country then photo:setRawMetadata("country", place.country) end
           if place.state then photo:setRawMetadata("stateProvince", place.state) end
