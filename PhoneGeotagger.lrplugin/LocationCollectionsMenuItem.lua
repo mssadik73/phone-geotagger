@@ -8,11 +8,12 @@ local LrPrefs = import "LrPrefs"
 local geocode_client = require "geocode_client"
 local place_extract = require "place_extract"
 local geo_cache = require "geo_cache"
-local smartcoll_rules = require "smartcoll_rules"
+local collection_name = require "collection_name"
 local plugin_paths = require "plugin_paths"
 local LocationDialog = require "LocationDialog"
 
 local USER_AGENT = "PhoneGeotagger/0.1 (github.com/mssadik73/phone-geotagger)"
+local FLUSH_SIZE = 500
 
 local function http_get(url)
   local body = LrHttp.get(url, { { field = "User-Agent", value = USER_AGENT } })
@@ -29,125 +30,89 @@ LrTasks.startAsyncTask(function()
       return
     end
     local photos = catalog:getTargetPhotos()
-    -- gps is raw metadata; city/location are text IPTC fields readable only as
-    -- FORMATTED metadata ("city"/"location" are not valid getRawMetadata keys).
-    local meta = catalog:batchGetRawMetadata(photos, { "gps" })
-    local fmt = catalog:batchGetFormattedMetadata(photos, { "city", "location" })
-
-    -- Collect GPS photos and the unique coordinate buckets among them.
-    local gps_photos = {}
-    local unique = {}      -- key -> { lat, lon }
-    for _, photo in ipairs(photos) do
-      local m = meta[photo]
-      local g = m and m.gps
-      if g and g.latitude and g.longitude then
-        gps_photos[#gps_photos + 1] = photo
-        local k = geo_cache.key(g.latitude, g.longitude)
-        if not unique[k] then unique[k] = { lat = g.latitude, lon = g.longitude } end
-      end
-    end
-    if #gps_photos == 0 then
-      LrDialogs.message("Create Location Collections",
-        "None of the selected photos have GPS coordinates.", "info")
-      return
-    end
-
-    local unique_count = 0
-    for _ in pairs(unique) do unique_count = unique_count + 1 end
 
     local prefs = LrPrefs.prefsForPlugin()
-    local settings = LocationDialog.run {
-      photo_count = #gps_photos, unique_count = unique_count, prefs = prefs,
-    }
+    local settings = LocationDialog.run { photo_count = #photos, prefs = prefs }
     if not settings then return end
+    local fmt = { primary = settings.primary, secondary = settings.secondary }
 
-    -- Only look up coordinates of photos that will actually be written.
-    local needed = {}
-    local needed_count = 0
-    for _, photo in ipairs(gps_photos) do
-      local m = meta[photo]
-      local fm = fmt[photo]
-      local has_existing = (fm.city and fm.city ~= "") or (fm.location and fm.location ~= "")
-      if settings.overwrite or not has_existing then
-        local k = geo_cache.key(m.gps.latitude, m.gps.longitude)
-        if not needed[k] then
-          needed[k] = { lat = m.gps.latitude, lon = m.gps.longitude }
-          needed_count = needed_count + 1
-        end
-      end
-    end
+    local cache_path = plugin_paths.geocode_cache_path()
+    local cache = geo_cache.load(cache_path)
 
-    -- Resolve each needed coordinate (cache first, else throttled network).
-    local cache = geo_cache.load(plugin_paths.geocode_cache_path())
-    progress = LrProgressScope { title = "Looking up locations" }
-    progress:setCancelable(true)
-    local unresolved = 0
-    local done = 0
-    for k, coord in pairs(needed) do
-      if progress:isCanceled() then break end
-      local place = geo_cache.get(cache, coord.lat, coord.lon)
-      if not place then
-        local addr = geocode_client.reverse(http_get, settings.endpoint, coord.lat, coord.lon)
-        if addr then
-          place = place_extract.extract(addr)
-          geo_cache.put(cache, coord.lat, coord.lon, place)
-        else
-          place = {} -- failed lookup: leave uncached so it retries next run
-        end
-        LrTasks.sleep(1.1) -- Nominatim: <= 1 req/sec, only on a real lookup
-      end
-      if not (place.sublocation or place.city) then unresolved = unresolved + 1 end
-      done = done + 1
-      progress:setPortionComplete(done, needed_count)
-    end
-    progress:done()
-    geo_cache.save(plugin_paths.geocode_cache_path(), cache)
+    -- Ensure the parent collection set exists.
+    local set
+    catalog:withWriteAccessDo("Location collections set", function()
+      set = catalog:createCollectionSet(settings.set_name, nil, true)
+    end)
 
-    -- Write IPTC fields; collect distinct (sublocation, city) pairs.
-    local tagged, skipped = 0, 0
-    local pair_seen, pairs_list = {}, {}
-    catalog:withWriteAccessDo("Write location metadata", function()
-      for _, photo in ipairs(gps_photos) do
-        local m = meta[photo]
-        local fm = fmt[photo]
-        local g = m.gps
-        local place = geo_cache.get(cache, g.latitude, g.longitude)
-        local has_existing = (fm.city and fm.city ~= "") or (fm.location and fm.location ~= "")
-        if place and place.sublocation and (settings.overwrite or not has_existing) then
-          if place.country then photo:setRawMetadata("country", place.country) end
-          if place.state then photo:setRawMetadata("stateProvince", place.state) end
-          if place.city then photo:setRawMetadata("city", place.city) end
-          photo:setRawMetadata("location", place.sublocation)
-          tagged = tagged + 1
-          local pk = place.sublocation .. "\0" .. (place.city or "")
-          if not pair_seen[pk] then
-            pair_seen[pk] = true
-            pairs_list[#pairs_list + 1] =
-              { sublocation = place.sublocation, city = place.city }
+    local colls = {}   -- name -> LrCollection (created lazily, reused across flushes)
+    local pending = {} -- name -> { photo, ... } buffered for the next flush
+    local pending_n = 0
+    local added, unresolved, no_gps = 0, 0, 0
+
+    local function flush()
+      if pending_n == 0 then return end
+      catalog:withWriteAccessDo("Add photos to location collections", function()
+        for name, list in pairs(pending) do
+          local coll = colls[name]
+          if not coll then
+            coll = catalog:createCollection(name, set, true)
+            colls[name] = coll
           end
-        elseif has_existing and not settings.overwrite then
-          skipped = skipped + 1
+          coll:addPhotos(list)
+        end
+      end)
+      pending = {}
+      pending_n = 0
+      geo_cache.save(cache_path, cache)
+    end
+
+    progress = LrProgressScope { title = "Building location collections" }
+    progress:setCancelable(true)
+
+    for i, photo in ipairs(photos) do
+      if progress:isCanceled() then break end
+      local g = photo:getRawMetadata("gps")
+      if not (g and g.latitude and g.longitude) then
+        no_gps = no_gps + 1
+      else
+        local place = geo_cache.get(cache, g.latitude, g.longitude)
+        if not place then
+          local addr = geocode_client.reverse(http_get, settings.endpoint,
+            g.latitude, g.longitude)
+          if addr then
+            place = place_extract.extract(addr)
+            geo_cache.put(cache, g.latitude, g.longitude, place)
+          else
+            place = {}
+          end
+          LrTasks.sleep(1.1) -- Nominatim: <= 1 req/sec, only on a real lookup
+        end
+        local name = collection_name.of(place, fmt)
+        if name then
+          pending[name] = pending[name] or {}
+          pending[name][#pending[name] + 1] = photo
+          pending_n = pending_n + 1
+          added = added + 1
+          if pending_n >= FLUSH_SIZE then flush() end
+        else
+          unresolved = unresolved + 1
         end
       end
-    end)
+      progress:setPortionComplete(i, #photos)
+    end
 
-    -- Create / refresh the smart-collection set and members.
-    local named = smartcoll_rules.names(pairs_list)
-    local created = 0
-    catalog:withWriteAccessDo("Create location collections", function()
-      local set = catalog:createCollectionSet(settings.set_name, nil, true)
-      for _, p in ipairs(named) do
-        catalog:createSmartCollection(p.name, smartcoll_rules.build(p.sublocation, p.city),
-          set, true)
-        created = created + 1
-      end
-    end)
+    flush()
+    progress:done()
+    progress = nil
 
+    local n_colls = 0
+    for _ in pairs(colls) do n_colls = n_colls + 1 end
     LrDialogs.message("Create Location Collections",
       string.format(
-        "Tagged %d photo(s), skipped %d (already had a location), %d unresolved.\n"
-        .. "%d Smart Collection(s) under \"%s\".",
-        tagged, skipped, unresolved, created, settings.set_name), "info")
+        "Added %d photo(s) to %d location collection(s) under \"%s\".\n"
+        .. "%d unresolved, %d without GPS.",
+        added, n_colls, settings.set_name, unresolved, no_gps), "info")
   end)
   if progress then progress:done() end
   if not ok then
