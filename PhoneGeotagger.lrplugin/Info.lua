@@ -9,6 +9,10 @@ return {
       title = "Geotag from Phone Timeline...",
       file = "GeotagMenuItem.lua",
     },
+    {
+      title = "Find Photos With This Geotag",
+      file = "FindGeotagGroupMenuItem.lua",
+    },
   },
   VERSION = { major = 0, minor = 1, revision = 0 },
 }
