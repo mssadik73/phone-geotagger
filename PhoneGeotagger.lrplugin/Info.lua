@@ -17,6 +17,10 @@ return {
       title = "Correct Geotag of Selection...",
       file = "CorrectGeotagMenuItem.lua",
     },
+    {
+      title = "Create Location Collections...",
+      file = "LocationCollectionsMenuItem.lua",
+    },
   },
   VERSION = { major = 0, minor = 1, revision = 0 },
 }
