@@ -27,6 +27,29 @@ geotag old photos any time — as long as some past export covered those dates.
 and correcting both resolve place names through Google (these are billable
 APIs; results are cached so each place is looked up once).
 
+### How a place name is resolved
+
+For each matched photo the plugin resolves the place through a ladder, stopping
+at the first tier that yields a name:
+
+1. **Timeline place ID** — when the photo falls inside a Timeline *visit* that
+   carries Google's `placeId`, the exact place is looked up with **Place
+   Details** (best POI name, e.g. `Griffith Observatory`). The GPS snaps to the
+   visit's coordinate.
+2. **Nearest notable place** — when the coordinate has no place ID (not every
+   visit does, and photos taken while moving never do), **Nearby Search** finds
+   the closest landmark within ~150 m from a curated list (attractions, parks,
+   museums, monuments…). The photo keeps its own GPS; only the *name* is
+   borrowed.
+3. **Reverse geocode** — if nothing notable is nearby, the coordinate is reverse
+   geocoded for **City / State / Country**.
+
+Whatever is found is written to the photo's IPTC fields — POI →
+Sublocation, plus City, State/Province, and Country — and later drives the
+offline collection names. Every unique spot (rounded to ~11 m) is looked up
+once and cached in `resolve-v1.json`, so repeat runs and photos that share a
+location cost no extra calls.
+
 ## Getting the Timeline file to your computer
 
 Any method works — the plugin just needs the JSON file on disk. A convenient
