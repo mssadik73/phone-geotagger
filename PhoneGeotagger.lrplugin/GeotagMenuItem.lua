@@ -51,13 +51,14 @@ LrTasks.startAsyncTask(function()
     local resolve_path = plugin_paths.resolve_cache_path()
     local resolve = geo_cache.load(resolve_path)
 
-    -- Resolve a placeId (cached).
+    -- Resolve a placeId (cached). Returns place or nil, error.
     local function resolve_place(place_id)
       local k = "pid:" .. place_id
       local p = resolve[k]
       if not p then
-        p = google_geo.place_details(http_get, key, place_id)
-        if p then resolve[k] = p end
+        local err
+        p, err = google_geo.place_details(http_get, key, place_id)
+        if p then resolve[k] = p else return nil, err end
       end
       return p
     end
@@ -72,7 +73,8 @@ LrTasks.startAsyncTask(function()
       return p
     end
 
-    local stats = { skipped = 0, unmatched = 0, no_time = 0, resolved = 0 }
+    local stats = { skipped = 0, unmatched = 0, no_time = 0, resolved = 0, place_fail = 0 }
+    local first_place_err
     local writes = {}
     progress = LrProgressScope { title = "Geotagging from phone Timeline" }
     progress:setCancelable(true)
@@ -101,7 +103,18 @@ LrTasks.startAsyncTask(function()
             local v = visit_matcher.match(history.visits, utc)
             if v then
               lat, lon = v.lat, v.lon
-              if v.place_id then place = resolve_place(v.place_id) end
+              if v.place_id and v.place_id ~= "" then
+                local perr
+                place, perr = resolve_place(v.place_id)
+                if not place then
+                  stats.place_fail = stats.place_fail + 1
+                  if not first_place_err then first_place_err = perr end
+                end
+              end
+              -- Visit with no placeId (not every Timeline visit carries one) or a
+              -- failed lookup: reverse-geocode the visit coordinate so the photo
+              -- still gets City/State/Country instead of no place at all.
+              if not place then place = resolve_coord(lat, lon) end
             else
               lat, lon = matcher.match(history.points, utc, settings.max_gap_sec)
               if lat then place = resolve_coord(lat, lon) end
@@ -138,10 +151,16 @@ LrTasks.startAsyncTask(function()
     progress:done()
     progress = nil
 
-    LrDialogs.message("Geotag from Phone Timeline — done", string.format(
+    local summary = string.format(
       "Tagged: %d (%d with a place)\nSkipped (had GPS): %d\n"
       .. "No match: %d\nNo capture time: %d",
-      #writes, stats.resolved, stats.skipped, stats.unmatched, stats.no_time), "info")
+      #writes, stats.resolved, stats.skipped, stats.unmatched, stats.no_time)
+    if stats.place_fail > 0 then
+      summary = summary .. string.format(
+        "\n\n%d visit place lookup(s) failed (fell back to area name).\nFirst error: %s",
+        stats.place_fail, tostring(first_place_err))
+    end
+    LrDialogs.message("Geotag from Phone Timeline — done", summary, "info")
   end)
   if progress then progress:done() end
   if not ok then
