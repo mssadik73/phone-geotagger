@@ -1,73 +1,78 @@
 local history_cache = require "history_cache"
 
 local tmpdir = os.getenv("TMPDIR") or "/tmp"
-local path = tmpdir .. "/phone_geotagger_test_cache.csv"
+local path = tmpdir .. "/phone_geotagger_hist_test.json"
 
 describe("history_cache", function()
   before_each(function() os.remove(path) end)
   after_each(function() os.remove(path) end)
 
-  it("loads an empty list when the file is missing", function()
-    assert.same({}, history_cache.load(path))
+  it("loads empty points+visits when the file is missing", function()
+    assert.same({ points = {}, visits = {} }, history_cache.load(path))
   end)
 
-  it("saves and reloads points, preserving order and precision", function()
-    local points = {
-      { t = 100, lat = 23.7805733, lon = 90.2792399 },
-      { t = 200, lat = -33.86882, lon = 151.209255 },
+  it("saves and reloads points and visits", function()
+    local data = {
+      points = { { t = 100, lat = 23.78, lon = 90.27 } },
+      visits = { { start_t = 100, end_t = 200, place_id = "A", lat = 1, lon = 2 } },
     }
-    assert.is_true(history_cache.save(path, points))
+    assert.is_true(history_cache.save(path, data))
     local loaded = history_cache.load(path)
-    assert.equals(2, #loaded)
-    assert.equals(100, loaded[1].t)
-    assert.near(23.7805733, loaded[1].lat, 1e-6)
-    assert.near(151.209255, loaded[2].lon, 1e-6)
+    assert.equals(1, #loaded.points)
+    assert.equals(100, loaded.points[1].t)
+    assert.equals("A", loaded.visits[1].place_id)
+    assert.equals(200, loaded.visits[1].end_t)
   end)
 
-  it("skips malformed lines on load", function()
-    local f = assert(io.open(path, "w"))
-    f:write("100,10.5,20.5\n")
-    f:write("garbage line\n")
-    f:write("200,11.5,21.5\n")
-    f:close()
-    assert.equals(2, #history_cache.load(path))
-  end)
-
-  it("merges with existing points winning on duplicate timestamps", function()
-    local existing = { { t = 100, lat = 1.0, lon = 2.0 } }
-    local incoming = {
-      { t = 100, lat = 9.0, lon = 9.0 },
-      { t = 50, lat = 3.0, lon = 4.0 },
+  it("merges points (existing wins) and visits (by place_id@start_t)", function()
+    local existing = {
+      points = { { t = 100, lat = 1, lon = 2 } },
+      visits = { { start_t = 100, end_t = 200, place_id = "A", lat = 1, lon = 1 } },
     }
-    local merged = history_cache.merge(existing, incoming)
-    assert.equals(2, #merged)
-    assert.equals(50, merged[1].t)   -- sorted
-    assert.equals(1.0, merged[2].lat) -- existing wins at t=100
+    local incoming = {
+      points = { { t = 100, lat = 9, lon = 9 }, { t = 50, lat = 3, lon = 4 } },
+      visits = {
+        { start_t = 100, end_t = 200, place_id = "A", lat = 9, lon = 9 }, -- dup
+        { start_t = 300, end_t = 400, place_id = "B", lat = 5, lon = 6 },
+      },
+    }
+    local m = history_cache.merge(existing, incoming)
+    assert.equals(2, #m.points)
+    assert.equals(50, m.points[1].t)      -- sorted
+    assert.equals(1, m.points[2].lat)     -- existing wins at t=100
+    assert.equals(2, #m.visits)
+    assert.equals(1, m.visits[1].lat)     -- existing A wins
+    assert.equals("B", m.visits[2].place_id)
   end)
 
-  it("reports coverage", function()
-    assert.is_nil(history_cache.coverage({}))
+  it("reports coverage over points", function()
+    assert.is_nil(history_cache.coverage({ points = {}, visits = {} }))
     local cov = history_cache.coverage({
-      { t = 100, lat = 1, lon = 2 },
-      { t = 900, lat = 3, lon = 4 },
+      points = { { t = 100, lat = 1, lon = 2 }, { t = 900, lat = 3, lon = 4 } },
+      visits = {},
     })
     assert.same({ count = 2, first_t = 100, last_t = 900 }, cov)
   end)
 
+  it("load returns empty structure on unparseable file", function()
+    local f = assert(io.open(path, "w")); f:write("not json"); f:close()
+    assert.same({ points = {}, visits = {} }, history_cache.load(path))
+  end)
+
   it("saves without os.rename/os.remove (Lightroom sandbox)", function()
-    -- Lightroom's Lua strips os.rename/os.remove; save must fall back to a
-    -- direct write instead of the atomic tmp+rename.
     local real_rename, real_remove = os.rename, os.remove
     os.rename, os.remove = nil, nil
     finally(function() os.rename, os.remove = real_rename, real_remove end)
 
-    local points = { { t = 100, lat = 10.5, lon = 20.5 } }
-    assert.is_true(history_cache.save(path, points))
+    local data = {
+      points = { { t = 100, lat = 10.5, lon = 20.5 } },
+      visits = { { start_t = 100, end_t = 200, place_id = "A", lat = 1, lon = 2 } },
+    }
+    assert.is_true(history_cache.save(path, data))
 
     os.rename, os.remove = real_rename, real_remove -- restore for load/cleanup
     local loaded = history_cache.load(path)
-    assert.equals(1, #loaded)
-    assert.equals(100, loaded[1].t)
-    assert.near(10.5, loaded[1].lat, 1e-6)
+    assert.equals(100, loaded.points[1].t)
+    assert.equals("A", loaded.visits[1].place_id)
   end)
 end)

@@ -10,8 +10,8 @@ local timeline_parser = require "timeline_parser"
 
 local GeotagDialog = {}
 
-local function coverage_text(points)
-  local cov = history_cache.coverage(points)
+local function coverage_text(history)
+  local cov = history_cache.coverage(history)
   if not cov then
     return "Cache: empty — import a Timeline export file"
   end
@@ -19,12 +19,12 @@ local function coverage_text(points)
     os.date("!%Y-%m-%d", cov.first_t), os.date("!%Y-%m-%d", cov.last_t))
 end
 
--- args: { photo_count, points, cache_path, prefs }
--- Returns { points, override_offset, home_offset, drift, max_gap_sec,
+-- args: { photo_count, history, cache_path, prefs }
+-- Returns { history, override_offset, home_offset, drift, max_gap_sec,
 -- overwrite } or nil on cancel.
 function GeotagDialog.run(args)
   local prefs = args.prefs
-  local points = args.points
+  local history = args.history
   local result
 
   LrFunctionContext.callWithContext("GeotagDialog", function(context)
@@ -37,7 +37,7 @@ function GeotagDialog.run(args)
     props.drift = prefs.drift or 0
     props.max_gap_min = prefs.max_gap_min or 15
     props.overwrite = prefs.overwrite or false
-    props.coverage = coverage_text(points)
+    props.coverage = coverage_text(history)
     props.precision = prefs.precision or 4
 
     local function absorb_file(file_path)
@@ -48,17 +48,17 @@ function GeotagDialog.run(args)
       end
       local text = fh:read("*a")
       fh:close()
-      local new_points, err = timeline_parser.parse(text)
-      if not new_points then
+      local parsed, err = timeline_parser.parse(text)
+      if not parsed then
         LrDialogs.message("Import failed", err, "warning")
         return
       end
-      points = history_cache.merge(points, new_points)
-      local ok, serr = history_cache.save(args.cache_path, points)
+      history = history_cache.merge(history, parsed)
+      local ok, serr = history_cache.save(args.cache_path, history)
       if not ok then
         LrDialogs.message("Cache write failed", tostring(serr), "warning")
       end
-      props.coverage = coverage_text(points)
+      props.coverage = coverage_text(history)
     end
 
     local contents = f:column {
@@ -175,7 +175,7 @@ function GeotagDialog.run(args)
     end
 
     result = {
-      points = points,
+      history = history,
       override_offset = override,
       home_offset = props.home_offset,
       drift = tonumber(props.drift) or 0,

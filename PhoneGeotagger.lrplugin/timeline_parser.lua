@@ -1,4 +1,4 @@
--- Parses Google Timeline exports into sorted {t, lat, lon} track points.
+-- Parses Google Timeline exports into sorted {t, lat, lon} track points and visits.
 -- Supported formats:
 --   1. Android on-device Timeline export: { semanticSegments = {...}, rawSignals = {...} }
 --   2. Legacy Google Takeout Records.json: { locations = { {latitudeE7, longitudeE7, timestamp} } }
@@ -29,7 +29,7 @@ local function add(points, t, lat, lon)
   end
 end
 
-local function parse_ondevice(doc, points)
+local function parse_ondevice(doc, points, visits)
   local segments = type(doc.semanticSegments) == "table" and doc.semanticSegments or {}
   local signals = type(doc.rawSignals) == "table" and doc.rawSignals or {}
   for _, seg in ipairs(segments) do
@@ -45,13 +45,15 @@ local function parse_ondevice(doc, points)
       add(points, t, lat, lon)
     end
     if seg.visit then
-      local place = seg.visit.topCandidate and seg.visit.topCandidate.placeLocation
-      local lat, lon = parse_latlng(place and place.latLng)
-      if lat then
-        -- A visit spans an interval at one place: emit both endpoints so
-        -- photos taken during the visit interpolate to that place.
-        add(points, seg_start, lat, lon)
-        add(points, utc(seg.endTime), lat, lon)
+      local tc = seg.visit.topCandidate
+      local lat, lon = parse_latlng(tc and tc.placeLocation and tc.placeLocation.latLng)
+      local s, e = utc(seg.startTime), utc(seg.endTime)
+      if lat and s and e then
+        visits[#visits + 1] = {
+          start_t = s, end_t = e,
+          place_id = tc.placeId,
+          lat = lat, lon = lon,
+        }
       end
     end
   end
@@ -79,26 +81,27 @@ local function parse_takeout(doc, points)
   end
 end
 
--- Returns a sorted array of {t, lat, lon}, or nil, error_message.
+-- Returns { points = sorted [{t,lat,lon}], visits = [{start_t,end_t,place_id,lat,lon}] },
+-- or nil, error_message.
 function timeline_parser.parse(json_text)
   local doc, _, jerr = dkjson.decode(json_text)
   if type(doc) ~= "table" then
     return nil, "Not valid JSON: " .. tostring(jerr)
   end
-  local points = {}
+  local points, visits = {}, {}
   if type(doc.locations) == "table" then
     parse_takeout(doc, points)
   elseif type(doc.semanticSegments) == "table" or type(doc.rawSignals) == "table" then
-    parse_ondevice(doc, points)
+    parse_ondevice(doc, points, visits)
   else
     return nil, "Unrecognized file. Expected a Google Timeline on-device export "
       .. "(semanticSegments/rawSignals) or a legacy Takeout Records.json (locations)."
   end
-  if #points == 0 then
+  if #points == 0 and #visits == 0 then
     return nil, "No location points found in the file."
   end
   table.sort(points, function(a, b) return a.t < b.t end)
-  return points
+  return { points = points, visits = visits }
 end
 
 return timeline_parser
