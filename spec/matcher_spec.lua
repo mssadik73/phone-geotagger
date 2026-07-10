@@ -7,10 +7,24 @@ local track = {
 }
 
 describe("matcher.match", function()
-  it("interpolates between bracketing points within the gap", function()
+  it("snaps to the nearest breadcrumb by time (earlier point)", function()
+    local lat, lon = matcher.match(track, 1300, 3600)
+    assert.equals(10.0, lat)
+    assert.equals(20.0, lon)
+  end)
+
+  it("snaps to the nearest breadcrumb by time (later point)", function()
+    local lat, lon = matcher.match(track, 1700, 3600)
+    assert.equals(12.0, lat)
+    assert.equals(22.0, lon)
+  end)
+
+  it("never interpolates — a midpoint snaps to a real point, not the average", function()
+    -- exactly between 1000 and 2000: must return one of the two actual points
+    -- (tie -> earlier), never (11.0, 21.0)
     local lat, lon = matcher.match(track, 1500, 3600)
-    assert.near(11.0, lat, 1e-9)
-    assert.near(21.0, lon, 1e-9)
+    assert.equals(10.0, lat)
+    assert.equals(20.0, lon)
   end)
 
   it("returns an exact point on a direct hit", function()
@@ -19,9 +33,9 @@ describe("matcher.match", function()
     assert.equals(22.0, lon)
   end)
 
-  it("falls back to the nearest point when the bracket gap is too wide", function()
-    -- bracket 2000..10000 is 8000s wide; gap limit 600s; photo at 2300 is
-    -- 300s from the point at 2000
+  it("snaps to the nearest even across a wide bracket", function()
+    -- bracket 2000..10000 is 8000s wide; photo at 2300 is 300s from the point
+    -- at 2000, well within the 600s gap
     local lat, lon = matcher.match(track, 2300, 600)
     assert.equals(12.0, lat)
     assert.equals(22.0, lon)

@@ -140,10 +140,10 @@ hours of travel away.
 
 ## Matching behavior
 
-- Track points bracketing the photo time are linearly interpolated when they
-  are within the **maximum time gap** (default 15 minutes); otherwise the
-  nearest point within the gap is used; otherwise the photo is left untouched
-  and reported as "no match".
+- Each photo snaps to the **nearest recorded track point in time** — an actual
+  location your phone logged, never a straight-line interpolation between two
+  points. If the closest point is beyond the **maximum time gap** (default 15
+  minutes), the photo is left untouched and reported as "no match".
 - Photos that already have GPS are skipped unless **Overwrite existing GPS
   coordinates** is checked.
 - Coordinates are written to the Lightroom catalog only; use Lightroom's

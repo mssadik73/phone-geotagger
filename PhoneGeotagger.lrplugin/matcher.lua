@@ -2,7 +2,9 @@
 
 local matcher = {}
 
--- Returns lat, lon — or nil, "empty" | "no_match".
+-- Returns the lat, lon of the breadcrumb closest in time to t — snapping to an
+-- actual recorded point, never interpolating between two. Returns nil, "empty"
+-- | "no_match" when the track is empty or the closest point is beyond max_gap.
 function matcher.match(points, t, max_gap)
   local n = #points
   if n == 0 then return nil, "empty" end
@@ -16,21 +18,14 @@ function matcher.match(points, t, max_gap)
   local after = points[lo]
   local before = points[lo - 1]
 
-  if after and after.t == t then
-    return after.lat, after.lon
-  end
-  if before and after and (after.t - before.t) <= max_gap then
-    local f = (t - before.t) / (after.t - before.t)
-    return before.lat + (after.lat - before.lat) * f,
-           before.lon + (after.lon - before.lon) * f
-  end
+  -- Snap to whichever bracketing breadcrumb is closer in time (ties -> earlier).
   local nearest
   if before and after then
     nearest = (t - before.t) <= (after.t - t) and before or after
   else
     nearest = before or after
   end
-  if math.abs(nearest.t - t) <= max_gap then
+  if nearest and math.abs(nearest.t - t) <= max_gap then
     return nearest.lat, nearest.lon
   end
   return nil, "no_match"
