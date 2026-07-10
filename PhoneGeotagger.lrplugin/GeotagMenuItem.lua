@@ -150,10 +150,11 @@ LrTasks.startAsyncTask(function()
                   if not first_place_err then first_place_err = perr end
                 end
               end
-              -- Visit with no placeId (not every Timeline visit carries one) or a
-              -- failed lookup: reverse-geocode the visit coordinate so the photo
-              -- still gets City/State/Country instead of no place at all.
-              if not place then place = resolve_coord_tracked(lat, lon) end
+              -- Visit with no placeId (not every Timeline visit carries one), a
+              -- failed lookup, or a placeId that resolved to an empty place: fall
+              -- back to nearby/reverse so the photo still gets City/State/Country
+              -- instead of no place at all.
+              if not has_place(place) then place = resolve_coord_tracked(lat, lon) end
             else
               lat, lon = matcher.match(history.points, utc, settings.max_gap_sec)
               if lat then place = resolve_coord_tracked(lat, lon) end
