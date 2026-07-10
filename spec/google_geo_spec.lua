@@ -197,6 +197,26 @@ describe("google_geo.reverse", function()
     assert.same({}, google_geo.reverse(get, "KEY", 0, 0))
   end)
 
+  it("gathers fields across results when the first lacks a country", function()
+    -- rural spot: result[1] is a natural feature without a country component;
+    -- a broader later result carries the country.
+    local body = [[{
+      "results": [
+        { "address_components": [
+            { "long_name": "Hamragardar", "types": ["natural_feature"] },
+            { "long_name": "Southern Region", "types": ["administrative_area_level_1"] }
+        ] },
+        { "address_components": [
+            { "long_name": "Iceland", "types": ["country", "political"] }
+        ] }
+      ],
+      "status": "OK"
+    }]]
+    local p = assert(google_geo.reverse(fake_get(body), "KEY", 63.6, -19.9))
+    assert.equals("Southern Region", p.state)
+    assert.equals("Iceland", p.country)
+  end)
+
   it("errors on a non-OK status", function()
     local get = fake_get('{"results": [], "status": "REQUEST_DENIED"}')
     local p, err = google_geo.reverse(get, "KEY", 0, 0)

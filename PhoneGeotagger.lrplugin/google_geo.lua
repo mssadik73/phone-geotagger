@@ -145,7 +145,18 @@ function google_geo.reverse(http_get, key, lat, lon)
   end
   local results = doc.results
   if type(results) ~= "table" or not results[1] then return {} end
-  local city, state, country = address(results[1].address_components, "long_name")
+  -- Google returns results most-specific -> least-specific (down to a
+  -- country-only result). A rural result[1] (a natural feature / plus code) can
+  -- lack a country component while a broader later result carries it, so take
+  -- each field from the first result that has it instead of only result[1].
+  local city, state, country
+  for _, r in ipairs(results) do
+    local c, s, co = address(r.address_components, "long_name")
+    city = city or c
+    state = state or s
+    country = country or co
+    if city and state and country then break end
+  end
   return { city = city, state = state, country = country }
 end
 
