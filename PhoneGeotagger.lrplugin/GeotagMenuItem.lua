@@ -101,9 +101,10 @@ LrTasks.startAsyncTask(function()
     end
 
     local stats = { skipped = 0, unmatched = 0, no_time = 0, resolved = 0,
-      place_fail = 0, coord_fail = 0 }
+      place_fail = 0, coord_fail = 0, empty = 0 }
     local first_place_err
     local first_coord_err
+    local first_empty_coord
     -- Reverse/nearby resolve for a placeId-less coordinate, tracking failures.
     local function resolve_coord_tracked(lat, lon)
       local p, cerr = resolve_coord(lat, lon)
@@ -158,10 +159,16 @@ LrTasks.startAsyncTask(function()
               if lat then place = resolve_coord_tracked(lat, lon) end
             end
             if lat then
-              lat, lon = coord_round.round(lat, lon, settings.precision)
-              if place and (place.poi or place.city or place.state or place.country) then
+              if has_place(place) then
                 stats.resolved = stats.resolved + 1
+              elseif place then
+                -- Call(s) succeeded but Google had no usable place for this spot.
+                stats.empty = stats.empty + 1
+                if not first_empty_coord then
+                  first_empty_coord = string.format("%.6f, %.6f", lat, lon)
+                end
               end
+              lat, lon = coord_round.round(lat, lon, settings.precision)
               writes[#writes + 1] = { photo = photo, lat = lat, lon = lon, place = place }
             else
               stats.unmatched = stats.unmatched + 1
@@ -202,6 +209,11 @@ LrTasks.startAsyncTask(function()
       summary = summary .. string.format(
         "\n\n%d coordinate place lookup(s) failed (got GPS but no place name).\n"
         .. "First error: %s", stats.coord_fail, tostring(first_coord_err))
+    end
+    if stats.empty > 0 then
+      summary = summary .. string.format(
+        "\n\n%d photo(s) got GPS but Google returned no place for the spot.\n"
+        .. "Example coordinate: %s", stats.empty, tostring(first_empty_coord))
     end
     LrDialogs.message("Geotag from Phone Timeline — done", summary, "info")
   end)
