@@ -72,22 +72,38 @@ LrTasks.startAsyncTask(function()
     -- Resolve a coordinate that has no placeId (cached): nearest notable POI
     -- first (keeps the coordinate, borrows only the name), then reverse-geocode
     -- to City/State/Country when nothing notable is within NEARBY_RADIUS.
+    -- Returns place (possibly {} when Google has nothing for the spot), or
+    -- nil, err when a lookup actually failed (so the caller can surface why).
     local function resolve_coord(lat, lon)
       local k = geo_cache.key(lat, lon)
       local p = resolve[k]
       if p then return p end
-      local np = google_geo.nearby_poi(http_post, key, lat, lon, NEARBY_RADIUS)
+      local np, nerr = google_geo.nearby_poi(http_post, key, lat, lon, NEARBY_RADIUS)
       if np and (np.poi or np.city or np.state or np.country) then
         resolve[k] = np
         return np
       end
-      p = google_geo.reverse(http_get, key, lat, lon)
-      if p then resolve[k] = p end
-      return p
+      local rp, rerr = google_geo.reverse(http_get, key, lat, lon)
+      if rp then
+        resolve[k] = rp
+        return rp
+      end
+      return nil, rerr or nerr
     end
 
-    local stats = { skipped = 0, unmatched = 0, no_time = 0, resolved = 0, place_fail = 0 }
+    local stats = { skipped = 0, unmatched = 0, no_time = 0, resolved = 0,
+      place_fail = 0, coord_fail = 0 }
     local first_place_err
+    local first_coord_err
+    -- Reverse/nearby resolve for a placeId-less coordinate, tracking failures.
+    local function resolve_coord_tracked(lat, lon)
+      local p, cerr = resolve_coord(lat, lon)
+      if not p then
+        stats.coord_fail = stats.coord_fail + 1
+        if not first_coord_err then first_coord_err = cerr end
+      end
+      return p
+    end
     local writes = {}
     progress = LrProgressScope { title = "Geotagging from phone Timeline" }
     progress:setCancelable(true)
@@ -127,10 +143,10 @@ LrTasks.startAsyncTask(function()
               -- Visit with no placeId (not every Timeline visit carries one) or a
               -- failed lookup: reverse-geocode the visit coordinate so the photo
               -- still gets City/State/Country instead of no place at all.
-              if not place then place = resolve_coord(lat, lon) end
+              if not place then place = resolve_coord_tracked(lat, lon) end
             else
               lat, lon = matcher.match(history.points, utc, settings.max_gap_sec)
-              if lat then place = resolve_coord(lat, lon) end
+              if lat then place = resolve_coord_tracked(lat, lon) end
             end
             if lat then
               lat, lon = coord_round.round(lat, lon, settings.precision)
@@ -172,6 +188,11 @@ LrTasks.startAsyncTask(function()
       summary = summary .. string.format(
         "\n\n%d visit place lookup(s) failed (fell back to area name).\nFirst error: %s",
         stats.place_fail, tostring(first_place_err))
+    end
+    if stats.coord_fail > 0 then
+      summary = summary .. string.format(
+        "\n\n%d coordinate place lookup(s) failed (got GPS but no place name).\n"
+        .. "First error: %s", stats.coord_fail, tostring(first_coord_err))
     end
     LrDialogs.message("Geotag from Phone Timeline — done", summary, "info")
   end)
