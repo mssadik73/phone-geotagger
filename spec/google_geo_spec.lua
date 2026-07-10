@@ -126,6 +126,62 @@ describe("google_geo.text_search", function()
   end)
 end)
 
+local NEARBY_BODY = [[{
+  "places": [
+    {
+      "displayName": { "text": "Griffith Observatory" },
+      "addressComponents": [
+        { "longText": "Los Angeles", "types": ["locality"] },
+        { "longText": "California", "types": ["administrative_area_level_1"] },
+        { "longText": "United States", "types": ["country"] }
+      ]
+    }
+  ]
+}]]
+
+describe("google_geo.nearby_poi", function()
+  it("parses the nearest place's POI and address", function()
+    local post = fake_post(NEARBY_BODY)
+    local p = assert(google_geo.nearby_poi(post, "KEY", 34.1184, -118.3004, 150))
+    assert.equals("Griffith Observatory", p.poi)
+    assert.equals("Los Angeles", p.city)
+    assert.equals("California", p.state)
+    assert.equals("United States", p.country)
+  end)
+
+  it("sends the searchNearby URL, field mask, and a distance-ranked circle", function()
+    local post, calls = fake_post(NEARBY_BODY)
+    google_geo.nearby_poi(post, "KEY", 34.1184, -118.3004, 150)
+    local c = calls[1]
+    assert.equals("https://places.googleapis.com/v1/places:searchNearby", c.url)
+    local body = c.body:gsub("%s", "")
+    assert.matches('"rankPreference":"DISTANCE"', body)
+    assert.matches('"maxResultCount":1', body)
+    assert.matches('"radius":150', body)
+    assert.matches("includedTypes", body)
+    assert.matches("tourist_attraction", body)
+    local hkey, hmask
+    for _, h in ipairs(c.headers) do
+      if h.field == "X-Goog-Api-Key" then hkey = h.value end
+      if h.field == "X-Goog-FieldMask" then hmask = h.value end
+    end
+    assert.equals("KEY", hkey)
+    assert.equals("places.displayName,places.addressComponents", hmask)
+  end)
+
+  it("returns an empty table when no notable place is nearby", function()
+    local post = fake_post('{"places": []}')
+    assert.same({}, google_geo.nearby_poi(post, "KEY", 0, 0, 150))
+  end)
+
+  it("errors on a Google error body", function()
+    local post = fake_post('{"error": {"message": "API not enabled"}}')
+    local p, err = google_geo.nearby_poi(post, "KEY", 0, 0, 150)
+    assert.is_nil(p)
+    assert.matches("API not enabled", err)
+  end)
+end)
+
 describe("google_geo.reverse", function()
   it("parses city/state/country from a Geocoding response", function()
     local get = fake_get(GEOCODE_BODY)

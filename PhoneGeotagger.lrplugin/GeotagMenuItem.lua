@@ -18,6 +18,13 @@ local GeotagDialog = require "GeotagDialog"
 local function http_get(url, headers)
   return (LrHttp.get(url, headers))
 end
+local function http_post(url, body, headers)
+  return (LrHttp.post(url, body, headers))
+end
+
+-- Radius (metres) for the nearest-notable-POI fallback when a coordinate has no
+-- placeId. Kept modest so a photo is only named for a place it was essentially at.
+local NEARBY_RADIUS = 150
 
 LrTasks.startAsyncTask(function()
   local progress
@@ -62,14 +69,20 @@ LrTasks.startAsyncTask(function()
       end
       return p
     end
-    -- Reverse-geocode a coordinate (cached).
+    -- Resolve a coordinate that has no placeId (cached): nearest notable POI
+    -- first (keeps the coordinate, borrows only the name), then reverse-geocode
+    -- to City/State/Country when nothing notable is within NEARBY_RADIUS.
     local function resolve_coord(lat, lon)
       local k = geo_cache.key(lat, lon)
       local p = resolve[k]
-      if not p then
-        p = google_geo.reverse(http_get, key, lat, lon)
-        if p then resolve[k] = p end
+      if p then return p end
+      local np = google_geo.nearby_poi(http_post, key, lat, lon, NEARBY_RADIUS)
+      if np and (np.poi or np.city or np.state or np.country) then
+        resolve[k] = np
+        return np
       end
+      p = google_geo.reverse(http_get, key, lat, lon)
+      if p then resolve[k] = p end
       return p
     end
 

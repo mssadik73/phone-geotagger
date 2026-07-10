@@ -83,6 +83,54 @@ function google_geo.text_search(http_post, key, query, bias_lat, bias_lon)
   return out
 end
 
+-- Notable place types for Nearby Search: real destinations, not roads or
+-- parking lots. Kept as one constant so it's the single place to adjust if
+-- Google rejects a type.
+google_geo.NOTABLE_TYPES = {
+  "tourist_attraction", "park", "national_park", "museum", "art_gallery",
+  "historical_landmark", "monument", "cultural_landmark", "church", "mosque",
+  "synagogue", "hindu_temple", "amusement_park", "zoo", "aquarium", "stadium",
+  "plaza", "garden",
+}
+
+-- Google Places (New) Nearby Search -> the nearest notable place to a
+-- coordinate as { poi, city, state, country }, or {} when none is found, or
+-- nil, err. Ranked by distance within `radius` metres.
+function google_geo.nearby_poi(http_post, key, lat, lon, radius)
+  local req = {
+    includedTypes = google_geo.NOTABLE_TYPES,
+    maxResultCount = 1,
+    rankPreference = "DISTANCE",
+    locationRestriction = {
+      circle = {
+        center = { latitude = lat, longitude = lon },
+        radius = radius,
+      },
+    },
+  }
+  local headers = {
+    { field = "Content-Type", value = "application/json" },
+    { field = "X-Goog-Api-Key", value = key },
+    { field = "X-Goog-FieldMask",
+      value = "places.displayName,places.addressComponents" },
+  }
+  local resp = http_post("https://places.googleapis.com/v1/places:searchNearby",
+    dkjson.encode(req), headers)
+  if not resp or resp == "" then return nil, "no response from Nearby Search" end
+  local doc = dkjson.decode(resp)
+  if type(doc) ~= "table" then return nil, "invalid Nearby Search response" end
+  if doc.error then
+    return nil, "Places error: " .. tostring(doc.error.message or doc.error)
+  end
+  local p = doc.places and doc.places[1]
+  if not p then return {} end
+  local city, state, country = address(p.addressComponents, "longText")
+  return {
+    poi = p.displayName and p.displayName.text or nil,
+    city = city, state = state, country = country,
+  }
+end
+
 -- Returns { city, state, country } (or {} when no result), or nil, err.
 function google_geo.reverse(http_get, key, lat, lon)
   local url = string.format(
