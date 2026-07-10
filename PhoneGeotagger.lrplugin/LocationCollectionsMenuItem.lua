@@ -26,7 +26,7 @@ LrTasks.startAsyncTask(function()
     local fmt = { primary = settings.primary, secondary = settings.secondary }
 
     local meta = catalog:batchGetFormattedMetadata(photos,
-      { "location", "city", "state", "country" })
+      { "location", "city", "stateProvince", "country" })
 
     local set
     catalog:withWriteAccessDo("Location collections set", function()
@@ -61,7 +61,7 @@ LrTasks.startAsyncTask(function()
       if progress:isCanceled() then break end
       local m = meta[photo] or {}
       local place = {
-        poi = m.location, city = m.city, state = m.state, country = m.country,
+        poi = m.location, city = m.city, state = m.stateProvince, country = m.country,
       }
       local name = collection_name.of(place, fmt)
       if name then
