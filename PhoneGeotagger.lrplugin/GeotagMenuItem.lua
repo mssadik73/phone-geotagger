@@ -72,22 +72,31 @@ LrTasks.startAsyncTask(function()
     -- Resolve a coordinate that has no placeId (cached): nearest notable POI
     -- first (keeps the coordinate, borrows only the name), then reverse-geocode
     -- to City/State/Country when nothing notable is within NEARBY_RADIUS.
-    -- Returns place (possibly {} when Google has nothing for the spot), or
-    -- nil, err when a lookup actually failed (so the caller can surface why).
+    local function has_place(p)
+      return p and (p.poi or p.city or p.state or p.country)
+    end
+    -- Returns a place, or {} when Google genuinely has nothing for the spot, or
+    -- nil, err when a lookup actually failed. Only NON-EMPTY places are cached
+    -- and treated as cache hits, so a coordinate that resolved to nothing (or an
+    -- empty entry left by an earlier run) is retried instead of stuck forever.
     local function resolve_coord(lat, lon)
       local k = geo_cache.key(lat, lon)
-      local p = resolve[k]
-      if p then return p end
+      local cached = resolve[k]
+      if has_place(cached) then return cached end
       local np, nerr = google_geo.nearby_poi(http_post, key, lat, lon, NEARBY_RADIUS)
-      if np and (np.poi or np.city or np.state or np.country) then
+      if has_place(np) then
         resolve[k] = np
         return np
       end
       local rp, rerr = google_geo.reverse(http_get, key, lat, lon)
-      if rp then
+      if has_place(rp) then
         resolve[k] = rp
         return rp
       end
+      -- A call succeeded but returned no usable place -> genuinely empty (not an
+      -- error). Don't cache it, so it's retried on a later run.
+      if rp or np then return {} end
+      -- Both calls errored.
       return nil, rerr or nerr
     end
 
