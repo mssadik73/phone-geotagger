@@ -21,6 +21,10 @@ return {
       title = "Create Location Collections...",
       file = "LocationCollectionsMenuItem.lua",
     },
+    {
+      title = "Clean Up Place Names",
+      file = "CleanupMenuItem.lua",
+    },
   },
   LrPluginInfoProvider = "PluginInfoProvider.lua",
   VERSION = { major = 0, minor = 1, revision = 0 },
