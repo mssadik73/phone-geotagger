@@ -61,29 +61,25 @@ A photo with no GPS is skipped (it can't be placed in a cluster) and counted
 
 ## Grouping into places
 
-Group key = **normalized POI + GPS cell**:
+Grouping = **trimmed POI bucket + proximity clustering** (updated from an
+earlier hard-grid idea, which a TDD test showed could split a 0.6 km-apart pair
+across a cell boundary — defeating the merge):
 
-- **POI part:** the photo's `location` trimmed; empty/absent POI is its own
-  bucket (`""`), so no-POI (moving) photos are grouped by cell alone and their
-  City/State/Country still get reconciled among themselves.
-- **GPS cell:** the coordinate snapped to a grid whose cell size corresponds to
-  the dialog's **cluster radius**. Cell index is
-  `floor(lat / cell_deg)`, `floor(lon / cell_deg)` where
-  `cell_deg = radius_km / 111` (≈ km-per-degree of latitude; a single constant
-  `KM_PER_DEG = 111`). This keeps grouping simple and deterministic. Two
-  same-named places farther apart than roughly the cell fall in different cells
-  and stay separate. The same `cell_deg` is used for longitude even though a
-  degree of longitude is shorter than 111 km away from the equator — this only
-  makes longitude cells *narrower* in km (more conservative: it never merges
-  places that are actually far apart, at worst it splits one that is close, and
-  the POI half of the key still holds those together). No `cos(latitude)`
-  correction is applied.
+- **POI bucket:** the photo's `location` trimmed; empty/absent POI is its own
+  bucket (`""`), so no-POI (moving) photos are clustered by proximity alone and
+  still get their City/State/Country reconciled among themselves.
+- **Proximity clustering:** within each POI bucket, **single-linkage cluster**
+  by distance — two records join the same group when within the dialog's
+  **cluster radius** (`place_reconcile.distance_km` ≤ `radius_km`). Distance is
+  an equirectangular approximation (`cos(mean latitude)` for longitude;
+  `KM_PER_DEG = 111`; no `atan2`), accurate at cluster scale. This has **no grid
+  boundaries**, so nearby photos of one place always merge, while same-named
+  places farther apart than the radius stay in separate groups. Clustering is
+  pairwise within a bucket (buckets are small — one POI); the empty-POI bucket
+  can be larger but is a one-time offline pass.
 
-So the group key string is `poi .. "\0" .. lat_cell .. "\0" .. lon_cell`.
-
-**Known limitation (accepted):** a hard grid can split one place across a cell
-boundary (two adjacent cells) instead of merging. Acceptable for v1; the radius
-is configurable to mitigate. Documented, not solved with clustering.
+`place_reconcile.groups(records, radius_km)` returns an array `gid` (record
+index → integer group id) and the group count.
 
 ## Reconciliation (per-field majority vote)
 

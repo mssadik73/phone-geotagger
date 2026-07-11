@@ -21,14 +21,22 @@
 
 ### Task 1: place_reconcile core module
 
+> **CORRECTION (applied during execution):** the hard-grid `cell`/`group_key`
+> design below was replaced with **POI-bucket + single-linkage proximity
+> clustering** after a TDD test showed the grid split a 0.6 km-apart pair
+> across a boundary. The public interface is now `distance_km` + `groups` +
+> `reconcile` (the shell in Task 3 only uses `reconcile`, unchanged). See the
+> committed `place_reconcile.lua` / `spec/place_reconcile_spec.lua` and the
+> updated spec's Grouping section for the authoritative version.
+
 **Files:**
 - Create: `PhoneGeotagger.lrplugin/place_reconcile.lua`
 - Test: `spec/place_reconcile_spec.lua`
 
 **Interfaces:**
 - Produces:
-  - `place_reconcile.cell(lat, lon, radius_km)` → `lat_cell, lon_cell` (integers).
-  - `place_reconcile.group_key(poi, lat, lon, radius_km)` → string key (nil/empty POI → `""` bucket, POI trimmed).
+  - `place_reconcile.distance_km(lat1, lon1, lat2, lon2)` → km (equirectangular).
+  - `place_reconcile.groups(records, radius_km)` → `gid` (array: record index → group id), `ngroups`. Buckets by trimmed POI (nil/"" → empty bucket), single-linkage clusters within `radius_km`.
   - `place_reconcile.reconcile(records, radius_km)` → `out, stats` where `records` is an array of `{ poi, city, state, country, lat, lon, time }` (`time` a sortable string or nil); `out` is an array (same order/length) of `{ city, state, country }` (any field may be nil); `stats` is `{ groups, conflicts }`.
 
 - [ ] **Step 1: Write the failing tests**
