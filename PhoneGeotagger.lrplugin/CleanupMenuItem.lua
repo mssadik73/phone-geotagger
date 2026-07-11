@@ -47,14 +47,16 @@ LrTasks.startAsyncTask(function()
 
     local resolved, stats = place_reconcile.reconcile(records, settings.radius_km)
 
-    -- Collect the fields that actually change.
+    -- Collect the fields that actually change. A nil winner means the field was
+    -- empty across the whole group, so it is never written (never clears an
+    -- existing value) and never counts as a change.
     local changes = {}
     for i, r in ipairs(records) do
       local w = resolved[i]
       local ch, any = {}, false
-      if (w.city or "") ~= (r.city or "") then ch.city = w.city; any = true end
-      if (w.state or "") ~= (r.state or "") then ch.state = w.state; any = true end
-      if (w.country or "") ~= (r.country or "") then ch.country = w.country; any = true end
+      if w.city ~= nil and w.city ~= r.city then ch.city = w.city; any = true end
+      if w.state ~= nil and w.state ~= r.state then ch.state = w.state; any = true end
+      if w.country ~= nil and w.country ~= r.country then ch.country = w.country; any = true end
       if any then ch.photo = rec_photo[i]; changes[#changes + 1] = ch end
     end
 
